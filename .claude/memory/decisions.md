@@ -239,6 +239,45 @@ builder stage.
 
 ---
 
+## 009 — Repository visibility: public
+
+**Date:** 2026-08-11
+**Status:** accepted
+
+**Context:** This repository is two things at once: the working control plane for the RevealRoll
+staging environment, and a portfolio artifact meant to be read by people deciding whether I know
+how to run infrastructure. Those two purposes pull in opposite directions on visibility. The
+repository holds no application source — it holds Terraform, Ansible, Helm charts, Argo CD
+manifests, and SealedSecrets — so what is exposed is *method*, not product.
+
+**Decision:** public.
+
+**Alternatives considered:**
+- *Private* — removes secret-leak blast radius almost entirely, and would let me be sloppier about
+  what lands in a commit. Rejected because a portfolio project nobody can read is not a portfolio
+  project, and because "assume a stranger is reading every commit" is precisely the operating
+  discipline this project exists to build. Making the rule optional would defeat it.
+- *Public, but with `secrets/` in a separate private repo* — Argo CD would then need credentials for
+  a second repository, and the app-of-apps stops being readable from one place. Rejected: it trades
+  a real architectural simplification for protection that Sealed Secrets already provides (see 002),
+  since the committed ciphertext is only decryptable by the controller's in-cluster private key.
+
+**Consequences:**
+- The "no plaintext secret ever enters this repository" rule in `CLAUDE.md` is load-bearing rather
+  than aspirational. A key committed to a public repo is scraped by bots in minutes, not hours.
+- `gitleaks detect --no-git` runs locally before every push and in CI on every push — not only when
+  I remember. It is in `make lint` for that reason.
+- Incident response for a leak is **rotate at source first**. History rewriting is secondary and
+  never sufficient: anyone who cloned or forked already has the value, and GitHub retains dangling
+  objects.
+- The real IP address of the VPS stays out of Git (`ansible/inventory/staging.yml` is gitignored;
+  only `.example` is committed). The host is on the public internet regardless, but there is no
+  reason to hand an inventory file to a scanner.
+- Everything committed here is written to be read cold by a stranger. That is a constraint on
+  naming and comments, not just on secrets.
+
+---
+
 ## Template for new entries
 
 ```markdown

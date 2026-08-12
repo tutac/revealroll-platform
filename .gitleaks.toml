@@ -1,0 +1,28 @@
+# Picked up automatically by `gitleaks detect` when run from the repo root.
+title = "RevealRoll platform"
+
+[extend]
+# Keep every default rule. This file only ADDS an allowlist; it never relaxes detection.
+useDefault = true
+
+[allowlist]
+description = """
+Files that hold real credentials by design, are gitignored, and are never committed.
+
+`gitleaks detect --no-git` scans the working directory and does NOT consult .gitignore, so
+without this it reports .envrc on every single run -- two findings that are correct about the
+content and wrong about the risk. A lint step that always fails is a lint step you stop reading,
+which is how the one real finding eventually gets scrolled past.
+
+This is safe ONLY because .gitignore already blocks these paths (see the Secrets block there) and
+`gitleaks detect` over git history -- which is the check that actually matters, and which this
+allowlist deliberately does not weaken -- is clean. Verified 2026-08-12: 5 commits, 0 findings.
+
+Do NOT widen this list to silence a finding in a file that git tracks. If a tracked file trips a
+rule, the answer is to rotate the credential and remove it, not to add a path here.
+"""
+
+paths = [
+  '''^\.envrc$''',
+  '''^\.env(\..+)?$''',
+]

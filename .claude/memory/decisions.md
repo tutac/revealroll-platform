@@ -1,0 +1,259 @@
+# Architecture Decisions
+
+ADR-lite. One entry per decision that a reasonable person could have made differently.
+
+**Why this file exists:** in six months, in an interview, someone will ask "why k3s and not kubeadm?"
+The honest answer written on the day you decided is far better than the one you reconstruct on the
+spot. Write the real reasoning, including the unflattering parts — "nginx has more StackOverflow
+answers at midnight" is a legitimate operational argument.
+
+**Format:** copy the shape of the entries below. Append new ones; don't rewrite old ones. If a
+decision is reversed, add a new entry that supersedes it and say so.
+
+---
+
+## 001 — Kubernetes distribution: k3s
+
+**Date:** 2026-08-11
+**Status:** accepted
+
+**Context:** One Contabo VPS (4 vCPU / 8 GB / 100 GB) running an observability stack plus the
+application. Full kubeadm control-plane components would consume a meaningful fraction of that budget
+before a single workload is scheduled.
+
+**Decision:** k3s, installed via an Ansible role, with `--disable=traefik --disable=servicelb`.
+
+**Alternatives considered:**
+- *kubeadm* — closer to the CKA exam and to what large shops run; more manual etcd and certificate
+  work. Rejected on memory footprint and setup time. The operational skills this project is really
+  about (GitOps, observability, incident response) are identical on either.
+- *Managed (EKS / GKE / AKS)* — removes the entire layer being learned, and costs more per month than
+  the VPS.
+- *k0s / MicroK8s* — comparable technically; k3s has the largest community and the best documentation,
+  which matters most when debugging alone.
+
+**Consequences:**
+- Same kubectl / YAML / API as any conformant cluster, so the skills transfer directly.
+- Must disable the bundled Traefik and servicelb or they contend with ingress-nginx for :80/:443.
+- `kube-prometheus-stack` needs its etcd / scheduler / controller-manager scrape jobs disabled,
+  because k3s doesn't expose them the way the chart expects.
+- Single node means no real HA and no meaningful pod anti-affinity until a second node exists. The
+  Ansible inventory and Terraform module are structured so adding one is a variable change.
+
+---
+
+## 002 — Secrets management: Sealed Secrets
+
+**Date:** 2026-08-11
+**Status:** accepted
+
+**Context:** GitOps requires the desired state of the cluster to live in Git, but the application needs
+~40 secrets (Supabase, Stripe, APNs, Resend, VAPID). Either they're in Git (unacceptable) or the system
+isn't really GitOps.
+
+**Decision:** bitnami-labs Sealed Secrets. `kubeseal` encrypts with the controller's public key; the
+resulting `SealedSecret` is committed; only the in-cluster private key can decrypt it.
+
+**Alternatives considered:**
+- *SOPS + age* — good ergonomics for encrypting Helm values, but requires a custom Argo CD
+  config-management-plugin. More moving parts than one controller.
+- *External Secrets Operator + Vault* — the most production-realistic answer, and what a real company
+  would run. Rejected because Vault would want ~500 MB of RAM on a single node, and the operational
+  lesson (never commit plaintext) is the same either way.
+- *Plain Kubernetes Secrets applied by hand* — breaks GitOps; the cluster would hold state that Git
+  doesn't know about.
+
+**Consequences:**
+- The repository can be public without leaking anything.
+- **The controller's private key is a single point of catastrophic failure.** Lose it and every
+  `SealedSecret` in this repo is permanently undecryptable. It is backed up in the password manager,
+  and re-backed-up after any controller reinstall. Verified during the Stage 10 restore drill.
+- Rotating a secret means re-sealing and committing; pods pick it up via the `checksum/secret`
+  annotation on the Deployment, which changes the pod spec and triggers a rollout.
+- SealedSecrets are bound to namespace + name by default, so moving one requires re-sealing.
+
+---
+
+## 003 — Ingress controller: ingress-nginx over the bundled Traefik
+
+**Date:** 2026-08-11
+**Status:** accepted
+
+**Context:** k3s ships Traefik enabled by default. Something has to terminate TLS and route
+hostnames, and there is no cloud load balancer available on Contabo.
+
+**Decision:** disable Traefik at k3s install time and deploy ingress-nginx via Helm, binding
+`hostPort` 80/443 with `externalTrafficPolicy: Local`.
+
+**Alternatives considered:**
+- *Traefik (keep the default)* — one less thing to install, and its CRDs are pleasant. Rejected
+  primarily on job-market grounds: ingress-nginx appears in far more postings, and — the honest
+  operational argument — has a much deeper pool of existing answers when something breaks at midnight
+  and there's nobody to ask.
+- *Gateway API implementation* — where the ecosystem is heading, and worth revisiting. Rejected for
+  now because Ingress is still what most existing systems use, and learning the incumbent first makes
+  the successor easier to understand.
+
+**Consequences:**
+- Requires `--disable=traefik` and `--disable=servicelb` at k3s install. These are install-time flags;
+  getting them wrong means reinstalling.
+- `hostPort` rather than `type: LoadBalancer`, because there is no cloud LB to provision one.
+- `externalTrafficPolicy: Local` preserves real client IPs — without it, access logs, rate limits, and
+  fail2ban all see only node IPs.
+- Annotation-based configuration (e.g. `proxy-body-size` for photo uploads) rather than Traefik CRDs.
+
+---
+
+## 004 — Repository layout: separate platform repo
+
+**Date:** 2026-08-11
+**Status:** accepted
+
+**Context:** Application code lives in `tutac/revealroll`. The infrastructure that runs it needs to
+live somewhere, and Argo CD needs a repository to watch.
+
+**Decision:** a separate repository, `tutac/revealroll-platform`, containing Terraform, Ansible, Helm
+charts, and Argo CD manifests. The app repo only builds images and writes a tag-bump commit here.
+
+**Alternatives considered:**
+- *Monorepo (infra inside the app repo)* — fewer moving parts, one clone. Rejected because Argo CD
+  watching the same repo that application CI writes to invites feedback loops, and it muddies the
+  platform repo's history — which is meant to be a clean deployment log.
+- *Three repos (terraform / gitops / charts)* — the most "correct" separation for a large org, and the
+  most overhead for one person.
+
+**Consequences:**
+- `git log charts/revealroll/values-staging.yaml` is a complete, auditable deployment history.
+- Cross-repo commits require a fine-grained PAT (`PLATFORM_REPO_TOKEN`), scoped to Contents:write on
+  this repo only — a credential to manage, but a far smaller one than a kubeconfig.
+- Two repos to keep in sync when something spans both (e.g. adding `ARG NEXT_PUBLIC_*` to the
+  Dockerfile for Stage 06).
+
+---
+
+## 005 — Terraform state and backups: Cloudflare R2
+
+**Date:** 2026-08-11
+**Status:** accepted
+
+**Context:** Terraform state must not live on a laptop — it contains every sensitive value in
+plaintext and is one `git add .` from being permanent. Contabo Object Storage is a separate paid
+product and is not enabled on this account.
+
+**Decision:** Cloudflare R2, free tier. Two buckets: `revealroll-tfstate` and `revealroll-backups`.
+Buckets created by hand in the dashboard; credentials supplied via `AWS_*` environment variables.
+
+**Alternatives considered:**
+- *Contabo Object Storage* (~€3/month) — keeps everything with one provider and one bill. Rejected on
+  cost, given a free option exists that does the same job.
+- *Backblaze B2* — equivalent free tier; slightly fiddlier S3 endpoint configuration.
+- *HCP Terraform* — free remote state with locking and a nice UI, but solves only state; etcd
+  snapshots would still need object storage, so it would mean adopting two things instead of one.
+
+**Consequences:**
+- Two R2-specific quirks that must be in the backend config: `skip_s3_checksum = true` (R2 rejects the
+  `x-amz-checksum-*` headers newer AWS SDKs send) and `use_lockfile = true` for locking, since there
+  is no DynamoDB.
+- Multi-provider setup — arguably more realistic than single-vendor, and it forces the credentials to
+  be genuinely externalised rather than implicitly available.
+- Strictly, R2 is a Cloudflare resource and belongs in a Terraform stack using the `cloudflare`
+  provider. The bootstrap bucket is managed by hand as a deliberate exception, because the bucket
+  that stores the state cannot be created by the stack whose state it stores.
+
+---
+
+## 006 — Database: existing Supabase staging project
+
+**Date:** 2026-08-11
+**Status:** accepted
+
+**Context:** The application depends on Supabase for Postgres, auth, and storage. The cluster needs a
+database to talk to.
+
+**Decision:** point the staging deployment at the **existing Supabase staging project**. No in-cluster
+Postgres.
+
+**Alternatives considered:**
+- *Postgres StatefulSet in-cluster* — real database operations practice (PVCs, backup/restore drills,
+  connection pooling). Rejected for now because the app uses Supabase auth and storage, not just
+  Postgres, so porting would be substantial application work rather than infrastructure work.
+
+**Consequences:**
+- Zero data migration; the app works on day one of Stage 06.
+- No stateful-workload practice in the cluster — the backup/restore drill in Stage 10 covers etcd and
+  the sealing key, not application data.
+- A new failure domain: the app can be perfectly healthy while every request fails because Supabase is
+  unreachable or a key was rotated. This is deliberately exercised in game day 10.8.
+- **Hard rule:** production Supabase credentials must never enter this cluster.
+
+---
+
+## 007 — Deployment: GitOps tag bump, not `helm upgrade` from CI
+
+**Date:** 2026-08-11
+**Status:** accepted
+
+**Context:** CI needs to get a newly built image running in the cluster.
+
+**Decision:** CI pushes the image to GHCR with an immutable `sha-<commit>` tag, then commits that tag
+into `charts/revealroll/values-staging.yaml`. Argo CD pulls and applies.
+
+**Alternatives considered:**
+- *CI runs `helm upgrade`* — simpler, one fewer repository interaction. Rejected because it requires a
+  kubeconfig stored in GitHub secrets: a credential that can do anything in the cluster, held in a
+  system reachable by any workflow file or compromised action.
+- *Argo CD Image Updater* — watches the registry and writes back to Git automatically. Less machinery
+  than a CI job, but it makes the deployment trigger implicit; an explicit commit is easier to reason
+  about and to explain.
+
+**Consequences:**
+- No cluster credentials ever leave the cluster.
+- Rollback is `git revert` — an operation already familiar under stress.
+- "What is running right now?" is answered by reading one line in one file.
+- A cross-repo PAT is required, and the bump job must be idempotent (no empty commits) and
+  concurrency-safe (pushes can race).
+
+---
+
+## 008 — `NEXT_PUBLIC_*` as build args: images are environment-specific
+
+**Date:** 2026-08-11
+**Status:** accepted, with known limitation
+
+**Context:** Next.js inlines `NEXT_PUBLIC_*` variables into the client bundle at **build** time. They
+cannot be supplied as runtime environment variables.
+
+**Decision:** pass them as Docker `--build-arg`s in CI, declared as `ARG`/`ENV` in the Dockerfile's
+builder stage.
+
+**Consequences:**
+- **The image is bound to one environment.** An image built with staging's `NEXT_PUBLIC_APP_URL` is a
+  staging image and cannot be promoted to production unchanged. This breaks the "build once, deploy
+  everywhere" principle.
+- The failure mode is silent: setting these only at runtime produces an app that starts fine and
+  points at the wrong Supabase project. Verified with
+  `curl -s https://stg.revealroll.com | grep -o 'https://[a-z0-9]*\.supabase\.co'`.
+- *If this ever needs fixing:* move to runtime configuration — the client fetches config from an API
+  route on load instead of reading `NEXT_PUBLIC_*`. That's an application change, not an
+  infrastructure one, and is out of scope for this project.
+
+---
+
+## Template for new entries
+
+```markdown
+## NNN — <short decision title>
+
+**Date:** YYYY-MM-DD
+**Status:** accepted | superseded by NNN
+
+**Context:** what forced a choice — constraints, costs, what was already true.
+
+**Decision:** what you chose, specifically.
+
+**Alternatives considered:**
+- *Option* — what it offered, and the real reason you rejected it.
+
+**Consequences:** what this makes easy, what it makes hard, and what you now have
+to remember forever.
+```

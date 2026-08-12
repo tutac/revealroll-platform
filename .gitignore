@@ -1,0 +1,71 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Course material — NOT part of the platform repo.
+# These are the instruction/walkthrough docs. The repo should contain only the
+# infrastructure you actually wrote.
+# ─────────────────────────────────────────────────────────────────────────────
+docs-course/
+excalidraw.log
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Secrets — anything here leaking is an incident. Sealed secrets are the ONLY
+# secret-shaped files allowed in Git (they are encrypted); see secrets/README.md.
+# ─────────────────────────────────────────────────────────────────────────────
+*.env
+.env
+.env.*
+!.env.example
+*.plain.yaml
+*.plain.yml
+*.key
+*.pem
+*.p8
+*.p12
+kubeconfig
+kubeconfig-*
+*.kubeconfig
+sealed-secrets-master.key
+ansible/inventory/group_vars/*vault*.yml
+!ansible/inventory/group_vars/vault.yml.example
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Terraform
+# ─────────────────────────────────────────────────────────────────────────────
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ansible
+# ─────────────────────────────────────────────────────────────────────────────
+*.retry
+.vault_pass
+ansible/inventory/staging.yml
+!ansible/inventory/staging.yml.example
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helm
+# ─────────────────────────────────────────────────────────────────────────────
+charts/**/charts/
+charts/**/Chart.lock
+*.tgz
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OS / editor
+# ─────────────────────────────────────────────────────────────────────────────
+.DS_Store
+*.swp
+.idea/
+.vscode/
+!.vscode/extensions.json

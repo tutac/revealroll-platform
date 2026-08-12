@@ -15,16 +15,23 @@ in advance rather than by whatever was nearest at 11 p.m.
 
 | What | File | Symbol / key | Stage |
 |------|------|--------------|-------|
-| Change the VPS size or image | `terraform/stacks/01-infra/main.tf` | `module "staging_nodes"` → `var.nodes` | ⏳ 01 |
-| **Add a second node (worker)** | `terraform/envs/staging.tfvars` | one more entry in `nodes` map, `role = "agent"` | ⏳ 01 |
-| Node definition itself | `terraform/modules/contabo-instance/main.tf` | `contabo_instance.this` | ⏳ 01 |
+| Change the VPS size or image | `terraform/stacks/01-infra/variables.tf` | `var.nodes` default → `product_id` / `image_id` | 01 |
+| **Add a second node (worker)** | `terraform/stacks/01-infra/variables.tf` | one more entry in the `nodes` default, `role = "agent"` | 01 |
+| Node definition itself | `terraform/modules/contabo-instance/main.tf` | `contabo_instance.this` | 01 |
 | Rotate Contabo API credentials | *(environment only)* | `CNTB_OAUTH2_*` in your gitignored `.envrc` | 01 |
-| Where Terraform state lives | `terraform/stacks/*/backend.tf` | Cloudflare R2, `skip_s3_checksum = true` | ⏳ 01 |
+| Where Terraform state lives | `terraform/stacks/*/backend.tf` | Cloudflare R2 **EU endpoint**, `skip_s3_checksum`, `use_lockfile` | 01 |
 | Rotate R2 credentials | *(environment only)* | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | 01 |
-| Get the VPS IP for anything | `terraform/stacks/01-infra/outputs.tf` | `output "ipv4"` | ⏳ 01 |
+| Get the VPS IP for anything | `terraform/stacks/01-infra/outputs.tf` | `output "ipv4"` (server node), `output "nodes"` (all) | 01 |
 
 ⚠️ The R2 buckets themselves are **created by hand** in the Cloudflare dashboard. The bucket that
 holds the state can't be managed by the stack whose state it holds. See Stage 01.2.
+
+⚠️ Node definitions live in `variables.tf` **with committed defaults**, not in a gitignored
+`terraform/envs/staging.tfvars`. A product SKU and an image UUID are not secrets, and hiding them
+would mean a fresh clone cannot plan the stack. Secrets stay in `.envrc`. See decision 010.
+
+⚠️ The R2 endpoint is `<account>.**eu**.r2.cloudflarestorage.com` — these buckets are in the EU
+jurisdiction. The plain `<account>.r2.cloudflarestorage.com` returns `AccessDenied`.
 
 ---
 

@@ -278,6 +278,46 @@ manifests, and SealedSecrets — so what is exposed is *method*, not product.
 
 ---
 
+## 010 — Node definitions as committed `variables.tf` defaults, not a gitignored `.tfvars`
+
+**Date:** 2026-08-12
+**Status:** accepted
+
+**Context:** Stage 01.8 moved `contabo_instance.this` into a reusable module driven by a `nodes` map.
+That map has to be *supplied* somewhere. The repo's `.gitignore` blanket-ignores `*.tfvars`, and the
+scaffold shipped a `terraform/envs/staging.tfvars.example`, so the obvious path was a gitignored
+`terraform/envs/staging.tfvars`. The values in question are a Contabo product SKU (`V153`), an OS
+image UUID, an add-on ID, and a role string. None of them are credentials.
+
+**Decision:** the `nodes` map carries a committed `default` in `terraform/stacks/01-infra/variables.tf`.
+`terraform/envs/staging.tfvars.example` and `terraform/stacks/01-infra/terraform.tfvars.example` were
+deleted rather than left as misleading dead files. The blanket `*.tfvars` ignore stays exactly as it is.
+
+**Alternatives considered:**
+- *Gitignored `terraform/envs/staging.tfvars`* — matches the scaffold's implied layout and the original
+  codemap row. Rejected: a fresh clone could not `terraform plan` at all, and "what is running in
+  staging?" would stop being answerable by reading Git — the same property the image-tag rule in
+  `CLAUDE.md` exists to protect. It also hides non-secret config behind a rule meant for secrets,
+  which erodes what the rule means.
+- *Committed `terraform/envs/staging.tfvars` with a `!` un-ignore exception* — keeps the intended
+  directory layout and the values in Git. Rejected as the worse of the two working options: it needs a
+  negation in `.gitignore` plus `-var-file` threaded through `make tf-plan` / `tf-apply`
+  (`Makefile:29`), so two more places must stay in sync to buy nothing over a default. A `*.tfvars`
+  ignore with a hole in it is also exactly the pattern that eventually lets a real secret through.
+
+**Consequences:**
+- `make tf-plan` and `make tf-apply` work with no `-var-file` and no Makefile change.
+- Adding a worker node is editing one map in one committed file, reviewable in a PR diff — which was
+  the point of extracting the module.
+- The rule to remember: **`*.tfvars` stays universally ignored, and nothing non-secret is ever put
+  there.** If a value belongs in Git, it goes in `variables.tf`; if it does not, it goes in `.envrc`.
+  There is deliberately no third category.
+- The VPS's public IP is still *not* committed (decision 009 holds): it is a computed output resolved
+  at plan time from the provider, never a literal in config.
+- `.claude/codemap.md` rows 18–19 were repointed at `variables.tf` in the same commit.
+
+---
+
 ## Template for new entries
 
 ```markdown

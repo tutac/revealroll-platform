@@ -1,0 +1,20 @@
+---
+# The role order here is load-bearing, not stylistic:
+#
+#   users     BEFORE ssh-hardening -- AllowUsers deploy locks out every account that does
+#             not exist yet, including root. The role asserts this, but ordering is what
+#             makes the assert unnecessary.
+#   firewall  BEFORE ssh-hardening -- the port sshd will listen on must already be open.
+#             It is 22 today and that is already open, but the day you move the port this
+#             ordering is the difference between a config change and a rescue console.
+- name: Harden the host
+  hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - common
+    - users
+    - firewall
+    - ssh-hardening
+    - fail2ban
+    - node-exporter

@@ -1,0 +1,35 @@
+---
+- name: Create the deploy user
+  ansible.builtin.user:
+    name: "{{ users_deploy_user }}"
+    shell: "{{ users_deploy_shell }}"
+    groups: "{{ users_deploy_groups }}"
+    append: true
+    create_home: true
+    state: present
+  become: true
+
+- name: Install the workstation public key for the deploy user
+  # Fails under --check on a host where the user does not exist yet: check mode did not
+  # really create it in the task above, and this module needs the user's home directory
+  # to decide what would change. Expected on a first dry run; harmless on a real one.
+  ansible.posix.authorized_key:
+    user: "{{ users_deploy_user }}"
+    key: "{{ users_deploy_pubkey }}"
+    state: present
+    # Deliberately NOT exclusive: that would delete keys added by a teammate or by the
+    # provider console, which is a fine way to lock everyone out during an incident.
+    exclusive: false
+  become: true
+
+- name: Grant passwordless sudo to the deploy user
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/90-{{ users_deploy_user }}"
+    content: "{{ users_deploy_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    # visudo refuses to install a file it cannot parse. Without this, one typo means
+    # nobody can sudo on a host where root SSH is about to be disabled.
+    validate: visudo -cf %s
+  become: true

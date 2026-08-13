@@ -1,0 +1,38 @@
+---
+- name: Install nftables
+  ansible.builtin.apt:
+    name: nftables
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Disable ufw so it cannot fight nftables for the ruleset
+  ansible.builtin.systemd_service:
+    name: ufw
+    enabled: false
+    state: stopped
+    masked: true
+  become: true
+  when: firewall_disable_ufw
+  failed_when: false   # ufw is not installed on every image; absence is success here
+
+- name: Deploy the nftables ruleset
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    owner: root
+    group: root
+    mode: "0755"
+    # -c parses without loading. A ruleset that does not parse is never written, so a
+    # bad edit cannot leave the host with a half-applied policy after a reboot.
+    validate: /usr/sbin/nft -c -f %s
+  become: true
+  notify: Reload nftables
+
+- name: Enable nftables at boot
+  ansible.builtin.systemd_service:
+    name: nftables
+    enabled: true
+    state: started
+  become: true

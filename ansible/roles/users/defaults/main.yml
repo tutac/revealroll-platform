@@ -1,0 +1,6 @@
+---
+users_deploy_user: "{{ deploy_user | default('deploy') }}"
+users_deploy_pubkey: "{{ deploy_user_pubkey }}"
+users_deploy_shell: /bin/bash
+users_deploy_groups:
+  - sudo

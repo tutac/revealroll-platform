@@ -1,0 +1,24 @@
+---
+# Runs ONCE, as root, over port 22. It is deliberately not imported by site.yml.
+#
+#   ansible-playbook -i inventory/staging.yml playbooks/00-bootstrap.yml
+#
+# Its only job is to create the account every later play connects as. Nothing else
+# belongs here: the moment `deploy` can sudo, this play has no further reason to exist,
+# and root SSH gets closed by the ssh-hardening role.
+- name: Bootstrap the deploy user (root, once)
+  hosts: all
+  gather_facts: true
+  vars:
+    ansible_user: root
+  roles:
+    - users
+
+  post_tasks:
+    - name: Prove the deploy user can sudo without a password
+      ansible.builtin.command: sudo -n -u root true
+      become: true
+      become_user: "{{ deploy_user }}"
+      changed_when: false
+      # If this fails, STOP. Do not run 10-harden.yml -- it disables root login, and
+      # a deploy user that cannot sudo would leave you with no way in at all.

@@ -1,0 +1,23 @@
+[Unit]
+# MANAGED BY ANSIBLE -- roles/node-exporter
+Description=Prometheus node exporter
+Documentation=https://github.com/prometheus/node_exporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User={{ node_exporter_user }}
+Group={{ node_exporter_user }}
+Type=simple
+ExecStart={{ node_exporter_bin }} --web.listen-address={{ node_exporter_listen_address }}
+Restart=on-failure
+RestartSec=5s
+
+# It only ever reads /proc and /sys. Nothing it does needs write access to the host.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

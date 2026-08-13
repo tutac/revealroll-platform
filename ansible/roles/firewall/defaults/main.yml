@@ -1,0 +1,18 @@
+---
+# Role defaults are namespaced (ansible-lint var-naming) but fall back to the shared
+# values in inventory/group_vars/all.yml, so there is still one place to change a port.
+firewall_ssh_port: "{{ ssh_port | default(22) }}"
+firewall_public_tcp_ports: "{{ public_tcp_ports | default([80, 443]) }}"
+
+# Interfaces k3s/flannel creates. Pod-to-pod and pod-to-service traffic arrives and is
+# forwarded on these; a default-drop forward chain without them breaks cluster DNS in
+# ways that present as application bugs. cni0 does not exist until Stage 03 -- nftables
+# accepts rules naming an absent interface, so installing them now is safe and means
+# nothing has to be revisited later.
+firewall_cni_interfaces:
+  - cni0
+  - flannel.1
+
+# ufw ships enabled-capable on Ubuntu and writes its own iptables rules. Two firewall
+# managers on one host is a debugging nightmare; we pick nftables and disable the other.
+firewall_disable_ufw: true

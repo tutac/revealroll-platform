@@ -1,0 +1,66 @@
+---
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ common_packages }}"
+    # `present`, never `latest`. `latest` reports changed the moment upstream publishes a
+    # new build, which destroys the zero-changed second run that is this stage's whole
+    # acceptance criterion -- and makes every run a surprise upgrade.
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Set the system timezone
+  community.general.timezone:
+    name: "{{ common_timezone }}"
+  become: true
+  notify: Restart cron
+
+- name: Cap journald disk usage
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/journald.conf
+    regexp: "^#?{{ item.key }}="
+    line: "{{ item.key }}={{ item.value }}"
+    state: present
+  loop: "{{ common_journald_settings | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}={{ item.value }}"
+  become: true
+  notify: Restart journald
+
+- name: Enable unattended security upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      // MANAGED BY ANSIBLE -- roles/common
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Restrict unattended upgrades to the security pocket
+  # Security patches apply themselves; feature updates do not. An unattended upgrade that
+  # pulls a new k3s or kernel at 3am is a self-inflicted incident.
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/51-security-only
+    content: |
+      // MANAGED BY ANSIBLE -- roles/common
+      Unattended-Upgrade::Allowed-Origins {
+          "${distro_id}:${distro_codename}-security";
+          "${distro_id}ESMApps:${distro_codename}-apps-security";
+          "${distro_id}ESM:${distro_codename}-infra-security";
+      };
+      Unattended-Upgrade::Automatic-Reboot "false";
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Enable the unattended-upgrades service
+  ansible.builtin.systemd_service:
+    name: unattended-upgrades
+    enabled: true
+    state: started
+  become: true

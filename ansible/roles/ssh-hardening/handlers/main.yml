@@ -1,0 +1,24 @@
+---
+# Both handlers listen on the same topic, and exactly one of them acts. Tasks notify
+# "Restart ssh" and stay ignorant of how this host serves SSH.
+#
+# Why this matters: on a socket-activated host systemd's ssh.socket owns port 22 and
+# ssh.service conflicts with it. Restarting both -- which an earlier version of this role
+# did -- makes them fight for the port and can leave NEITHER listening. That is a
+# self-inflicted outage on the one service you need to fix it with.
+- name: Restart ssh service
+  listen: Restart ssh
+  ansible.builtin.systemd_service:
+    name: ssh
+    state: restarted
+  become: true
+  when: not ssh_hardening_socket_activated
+
+- name: Restart ssh socket
+  listen: Restart ssh
+  ansible.builtin.systemd_service:
+    name: ssh.socket
+    state: restarted
+    daemon_reload: true
+  become: true
+  when: ssh_hardening_socket_activated

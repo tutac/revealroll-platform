@@ -1,0 +1,13 @@
+---
+# ansible-lint configuration. CI runs bare `ansible-lint` from this directory.
+
+skip_list:
+  # role-name: requires ^[a-z][a-z0-9_]*$, i.e. underscores. Our roles are hyphenated
+  # (ssh-hardening, node-exporter, k3s-server) and that spelling is documented in
+  # CLAUDE.md and .claude/codemap.md. Hyphens are legal in role directory names and
+  # work everywhere we use them; renaming would desync the docs for a cosmetic rule.
+  # If you ever DO rename them, fix both docs in the same commit.
+  - role-name
+
+exclude_paths:
+  - .cache/

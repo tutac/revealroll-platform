@@ -1,0 +1,53 @@
+---
+- name: Create the node_exporter system user
+  ansible.builtin.user:
+    name: "{{ node_exporter_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+    state: present
+  become: true
+
+- name: Read the installed node_exporter version
+  ansible.builtin.command: "{{ node_exporter_bin }} --version"
+  register: node_exporter_installed
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Install the node_exporter binary
+  # Downloading is not idempotent by itself, so it is gated on the version actually
+  # installed. Without this the role re-downloads on every run and never reports
+  # changed=0 -- the classic way a `command`-shaped task ruins a playbook.
+  ansible.builtin.unarchive:
+    src: "{{ node_exporter_url }}"
+    dest: /usr/local/bin
+    remote_src: true
+    extra_opts:
+      - --strip-components=1
+      - --wildcards
+      - "*/node_exporter"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: node_exporter_version not in (node_exporter_installed.stdout | default(''))
+  notify: Restart node_exporter
+
+- name: Install the node_exporter systemd unit
+  ansible.builtin.template:
+    src: node_exporter.service.j2
+    dest: /etc/systemd/system/node_exporter.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Restart node_exporter
+
+- name: Enable node_exporter
+  ansible.builtin.systemd_service:
+    name: node_exporter
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true

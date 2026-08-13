@@ -1,0 +1,15 @@
+---
+# The whole machine, in order. Idempotent and re-runnable:
+#
+#   ansible-playbook -i inventory/staging.yml site.yml
+#
+# 00-bootstrap.yml is deliberately NOT imported. It connects as root, runs once, and has
+# no reason to exist after the deploy user does.
+- name: Harden the host
+  import_playbook: playbooks/10-harden.yml
+
+- name: Install k3s
+  import_playbook: playbooks/20-k3s.yml
+
+- name: Verify the host is hardened
+  import_playbook: playbooks/99-verify.yml

@@ -1,0 +1,15 @@
+---
+node_exporter_version: "1.8.2"
+node_exporter_arch: amd64          # the VPS is linux/amd64; your Mac is not
+node_exporter_user: node_exporter
+node_exporter_bin: /usr/local/bin/node_exporter
+
+# Split across three vars only so no single line exceeds the 160-char yaml lint limit.
+node_exporter_release: "https://github.com/prometheus/node_exporter/releases/download"
+node_exporter_tarball: "node_exporter-{{ node_exporter_version }}.linux-{{ node_exporter_arch }}.tar.gz"
+node_exporter_url: "{{ node_exporter_release }}/v{{ node_exporter_version }}/{{ node_exporter_tarball }}"
+
+# 127.0.0.1 ONLY. Prometheus scrapes it from inside the cluster over loopback; the
+# firewall never opens 9100. Binding 0.0.0.0 publishes your host's full metric surface
+# -- uptime, mounts, kernel version, network peers -- to anyone who portscans you.
+node_exporter_listen_address: "127.0.0.1:9100"

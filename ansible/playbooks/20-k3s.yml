@@ -1,0 +1,11 @@
+---
+# Stage 03 fills this in. It exists now only because site.yml imports it, and importing
+# an empty file is a hard error.
+- name: Install k3s (stage 03)
+  hosts: k3s_servers
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Placeholder until the k3s-server role is written
+      ansible.builtin.debug:
+        msg: "k3s installation lands in stage 03 -- roles/k3s-server is still empty."

@@ -1,0 +1,8 @@
+---
+- name: Reload nftables
+  ansible.builtin.command: /usr/sbin/nft -f /etc/nftables.conf
+  become: true
+  changed_when: true
+  # `nft -f` is atomic: the new ruleset replaces the old in one transaction, so there is
+  # never a window where the host is unfiltered -- nor one where your SSH session dies
+  # because the accept rule for port 22 had not been added back yet.

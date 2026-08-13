@@ -1,0 +1,21 @@
+---
+# Copy to staging.yml (gitignored) and fill in the real IP:
+#   cp inventory/staging.yml.example inventory/staging.yml
+#   cd ../terraform/stacks/01-infra && terraform output -raw ipv4
+#
+# The IP is not a secret. Keeping the real file local is a habit that starts paying the
+# moment there is a second environment and the two inventories must not be confused.
+all:
+  children:
+    k3s_servers:
+      hosts:
+        staging-1:
+          ansible_host: 203.0.113.10   # terraform output -raw ipv4
+          k3s_role: server
+    # Stage 03 slots additional nodes in here without touching any playbook.
+    k3s_agents:
+      hosts: {}
+  vars:
+    ansible_user: deploy
+    ansible_port: 22
+    ansible_ssh_private_key_file: ~/.ssh/id_ed25519

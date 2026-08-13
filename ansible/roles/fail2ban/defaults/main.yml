@@ -1,0 +1,11 @@
+---
+fail2ban_ssh_port: "{{ ssh_port | default(22) }}"
+fail2ban_maxretry: 3
+fail2ban_bantime: 1h
+fail2ban_findtime: 10m
+
+# Never ban yourself off your own box. Add a static office/home IP here if you have one;
+# without it, a fat-fingered key three times running costs you an hour.
+fail2ban_ignoreip:
+  - 127.0.0.1/8
+  - ::1

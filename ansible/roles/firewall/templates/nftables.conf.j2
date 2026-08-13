@@ -1,0 +1,41 @@
+#!/usr/sbin/nft -f
+# MANAGED BY ANSIBLE -- roles/firewall. Hand edits are lost on the next run.
+flush ruleset
+
+{% set cni = firewall_cni_interfaces | map('regex_replace', '^(.*)$', '"\\1"') | join(', ') %}
+table inet filter {
+  chain input {
+    type filter hook input priority 0; policy drop;
+
+    iif lo accept comment "loopback is not a threat model"
+    ct state established,related accept
+    ct state invalid drop
+
+    # Ping stays reachable: losing ICMP costs you your simplest liveness check, and
+    # rate limiting removes the only reason people block it.
+    ip protocol icmp icmp type echo-request limit rate 4/second accept
+    ip6 nexthdr ipv6-icmp accept
+
+    tcp dport { {{ firewall_ssh_port }} } accept comment "ssh"
+    tcp dport { {{ firewall_public_tcp_ports | join(', ') }} } accept comment "ingress-nginx hostPort"
+
+    # Cluster-internal traffic. 6443 (kube-apiserver) and 9100 (node-exporter) are
+    # deliberately absent: the API is reached over an SSH tunnel, and Prometheus scrapes
+    # node-exporter on 127.0.0.1 from inside the cluster.
+    iifname { {{ cni }} } accept comment "k3s CNI"
+  }
+
+  chain forward {
+    type filter hook forward priority 0; policy drop;
+
+    # Pod networking IS forwarded traffic. Without these three rules cluster DNS fails
+    # and every symptom points somewhere else.
+    ct state established,related accept
+    iifname { {{ cni }} } accept
+    oifname { {{ cni }} } accept
+  }
+
+  chain output {
+    type filter hook output priority 0; policy accept;
+  }
+}

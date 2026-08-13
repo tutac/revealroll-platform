@@ -1,0 +1,29 @@
+---
+- name: Install fail2ban
+  ansible.builtin.apt:
+    name:
+      - fail2ban
+      # The systemd backend reads the journal through this binding; without it fail2ban
+      # starts, logs a Python import error, and quietly protects nothing.
+      - python3-systemd
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+
+- name: Configure the sshd jail
+  ansible.builtin.template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: Restart fail2ban
+
+- name: Enable fail2ban
+  ansible.builtin.systemd_service:
+    name: fail2ban
+    enabled: true
+    state: started
+  become: true

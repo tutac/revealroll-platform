@@ -32,8 +32,83 @@ Estimate honestly rather than leaving them blank; a rough number you can defend 
 
 ## Entries
 
-*(newest first — nothing here yet. The first entry will probably be from Stage 02 or 03,
-because that's where things start being able to break.)*
+*(newest first)*
+
+## 2026-08-12 — SSH stopped listening on staging-1 immediately after the first hardening run
+
+**Type:** real incident
+**Severity:** total loss of remote administration (no user impact — nothing is served from this
+host yet)
+
+**Detected:** immediately, and by luck rather than design. `site.yml` finished clean
+(`ok=49 changed=24 failed=0`), and a verification probe from a second machine got
+`Connection refused` on port 22 seconds later. Nothing on the host reported a problem: the
+playbook's own `99-verify.yml` had already passed, because it asserts on `sshd -T` output —
+the *configuration* sshd would use — not on whether anything is actually bound to the port.
+
+**Impact:** ~15 minutes with no new SSH logins possible. An already-open `deploy` session
+survived (established connections belong to an already-forked child) and was the only route
+back in.
+
+**Timeline:**
+- 21:5x — `ansible-playbook site.yml` completes successfully, 24 changed
+- +0m — external probe returns `Connection refused` on 22 (host up, firewall passing: a
+  default-drop rule would have timed out, so a RST meant nothing was listening)
+- +2m — recovery attempted through the still-open session
+- +5m — `systemctl start ssh.socket` issued
+- +15m — SSH restored from the operator's terminal
+
+**Root cause:** the `ssh-hardening` role wrote `/etc/systemd/system/ssh.socket.d/override.conf`
+containing `ListenStream=` followed by `ListenStream=22`. The empty assignment clears the vendor
+unit's listener list — which defines a *pair* of sockets, IPv4 and IPv6 — and the single
+replacement bound **IPv6 only**. Every IPv4 connection then got a TCP RST, which surfaces as
+`Connection refused`. The host looked healthy from inside throughout: `sshd -T` was correct,
+nftables had `tcp dport 22 accept`, the fail2ban ban set was empty, and `ss` showed a listener —
+just `[::]:22` with no `0.0.0.0:22` beside it. That missing second line was the whole incident.
+
+The override should never have been written at all: the configured port was 22, which is what the
+vendor unit already listens on. A change with no effect still carries all of its risk.
+
+A second, latent bug was found while debugging: the role notified both a `Restart sshd` handler
+(starting `ssh.service`) and a `Restart ssh socket` handler, and on a socket-activated host those
+two units conflict over the port. It did not cause this outage but would eventually have caused
+one of its own.
+
+**Diagnostic note — why this took 15 minutes instead of 2:** `Connection refused` and
+`Connection timed out` mean different things and we reasoned from that correctly (a `policy drop`
+firewall times out; an RST means something answered). But the first two hypotheses — a fail2ban
+ban, then a provider-level firewall — were both plausible and both wrong, and each took a round
+trip to disprove. The evidence that identified the cause was in the very first `ss` output:
+one address family where there should have been two.
+
+**Fix:** removed `override.conf` from the surviving session, `daemon-reload`, stopped
+`ssh.service`, restarted `ssh.socket` — `ss` then showed both `0.0.0.0:22` and `[::]:22` and
+access returned. Then in the role: both handlers now
+`listen: Restart ssh` and are mutually exclusive on a `ssh_hardening_socket_activated` fact, so
+exactly one runs; and the port override is only written when the configured port actually
+differs from 22, and is removed otherwise.
+
+**MTTD:** ~0m (probe was already running) **MTTR:** ~15m
+
+**What would have caught this sooner:** `99-verify.yml` validated intent, not reality. It read
+`sshd -T` and never asked whether port 22 was *bound*. A `wait_for` on the port from the control
+node would have failed the run at the moment of breakage instead of passing while SSH was down.
+**Validating configuration is not validating service** — and note that even an on-host `ss` check
+would have passed here, because a listener did exist. Only a probe from *outside*, over IPv4,
+distinguishes "a socket is open" from "the socket users need is open."
+
+**What went well:** the second SSH session was open before the hardening run, exactly as the
+stage instructions require, and it was the entire reason this was a 15-minute annoyance rather
+than a trip through the Contabo rescue system — which had already cost an hour earlier the same
+day, before any key existed on the box.
+
+**Action items:**
+- [x] Make the ssh restart handlers mutually exclusive — done 2026-08-12
+- [x] Stop writing a socket port override when the port is unchanged — done 2026-08-12
+- [ ] Add a port-reachability assertion to `99-verify.yml` (`wait_for` port 22 from the control
+      node, plus `ss -ltn` on the host) — by 2026-08-19
+- [ ] Add the workstation IP to `fail2ban_ignoreip`; repeated probes during the outage tripped
+      the `maxretry 3` jail and the reject action made diagnosis harder — by 2026-08-19
 
 ---
 

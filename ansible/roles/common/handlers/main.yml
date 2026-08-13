@@ -1,0 +1,14 @@
+---
+- name: Restart journald
+  ansible.builtin.systemd_service:
+    name: systemd-journald
+    state: restarted
+  become: true
+
+- name: Restart cron
+  # cron caches the timezone at start; without this a TZ change silently does not reach
+  # scheduled jobs until the next reboot.
+  ansible.builtin.systemd_service:
+    name: cron
+    state: restarted
+  become: true

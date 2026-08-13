@@ -1,0 +1,9 @@
+---
+# Install with: ansible-galaxy collection install -r requirements.yml
+collections:
+  # ansible.posix.authorized_key, ansible.posix.sysctl
+  - name: ansible.posix
+    version: ">=1.5.0"
+  # community.general.* -- used from Stage 03 onward (k3s helpers, ufw, timezone edges)
+  - name: community.general
+    version: ">=8.0.0"

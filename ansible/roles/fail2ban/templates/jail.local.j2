@@ -1,0 +1,19 @@
+# MANAGED BY ANSIBLE -- roles/fail2ban. Hand edits are lost on the next run.
+#
+# jail.local, not jail.conf: package upgrades overwrite jail.conf and would silently
+# revert every setting here.
+
+[DEFAULT]
+ignoreip  = {{ fail2ban_ignoreip | join(' ') }}
+bantime   = {{ fail2ban_bantime }}
+findtime  = {{ fail2ban_findtime }}
+maxretry  = {{ fail2ban_maxretry }}
+
+# Ubuntu 24.04 logs sshd to the journal, not /var/log/auth.log. With the default
+# backend fail2ban watches a file that is never written and bans nobody, while
+# reporting itself perfectly healthy.
+backend   = systemd
+
+[sshd]
+enabled  = true
+port     = {{ fail2ban_ssh_port }}

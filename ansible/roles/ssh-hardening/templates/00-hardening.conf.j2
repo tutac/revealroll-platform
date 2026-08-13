@@ -1,0 +1,23 @@
+# MANAGED BY ANSIBLE -- roles/ssh-hardening. Hand edits are lost on the next run.
+#
+# Named 00- on purpose: sshd keeps the first value it sees for a keyword, and this
+# directory is read in lexical order. Anything later cannot override what is set here.
+
+Port {{ ssh_hardening_port }}
+
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+
+# Only this account may log in at all. Note this is what closes the door on root even
+# if some other drop-in re-enables PermitRootLogin.
+AllowUsers {{ ssh_hardening_user }}
+
+MaxAuthTries {{ ssh_hardening_max_auth_tries }}
+X11Forwarding no
+AllowAgentForwarding no
+
+# Reap sessions whose network died, so a dropped laptop does not hold a shell open.
+ClientAliveInterval {{ ssh_hardening_client_alive_interval }}
+ClientAliveCountMax {{ ssh_hardening_client_alive_count_max }}

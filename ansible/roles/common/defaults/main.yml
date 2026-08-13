@@ -1,0 +1,19 @@
+---
+common_timezone: "{{ timezone | default('UTC') }}"
+
+common_packages:
+  - curl
+  - ca-certificates
+  - gnupg
+  - htop
+  - jq
+  - nftables
+  - unattended-upgrades
+  - python3-apt
+
+# An unbounded journal filling / is the classic single-VPS outage, and it does not
+# announce itself as a disk problem -- it shows up as ten unrelated Kubernetes symptoms
+# at once. 500M on a 96G disk is generous and still bounded.
+common_journald_settings:
+  SystemMaxUse: 500M
+  SystemMaxFileSize: 50M

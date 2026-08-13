@@ -1,0 +1,131 @@
+---
+# Assertions, not vibes. This play changes nothing; it fails loudly if the host is not in
+# the state the other roles claim to have put it in. Run it after every site.yml, and any
+# time you suspect someone has been in here with their hands.
+- name: Verify the host is hardened
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Read the effective sshd configuration
+      # `sshd -T` prints what sshd ACTUALLY resolved, drop-ins and all. Grepping the
+      # config files instead is how you convince yourself of something that is not true.
+      ansible.builtin.command: sshd -T
+      register: verify_sshd
+      changed_when: false
+
+    - name: Assert SSH is hardened
+      ansible.builtin.assert:
+        that:
+          - "'permitrootlogin no' in verify_sshd.stdout"
+          - "'passwordauthentication no' in verify_sshd.stdout"
+          - "'kbdinteractiveauthentication no' in verify_sshd.stdout"
+          - "'allowusers ' ~ deploy_user in verify_sshd.stdout"
+        fail_msg: >-
+          sshd is NOT hardened. Check drop-in ordering in /etc/ssh/sshd_config.d/ --
+          the FIRST value wins, so a file sorting before 00-hardening.conf silently
+          overrides it.
+        success_msg: "sshd: root login off, passwords off, AllowUsers {{ deploy_user }}."
+
+    - name: Assert something is actually bound to the SSH port
+      # `sshd -T` above proves the CONFIG is right. It says nothing about whether a
+      # process is listening -- on 2026-08-12 the config was perfect and SSH was down.
+      # Checking the socket on the host catches a service that failed to bind.
+      ansible.builtin.shell:
+        cmd: set -o pipefail && ss -ltn | grep -q ":{{ ssh_port }} " && echo bound || echo UNBOUND
+        executable: /bin/bash
+      register: verify_ssh_bound
+      changed_when: false
+
+    - name: Assert the SSH port is reachable from the control node
+      # And this proves it from the outside: config correct, process listening, firewall
+      # passing. Delegated to localhost so it tests the path you actually connect over.
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ ssh_port }}"
+        timeout: 10
+        state: started
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Assert SSH is both configured and serving
+      ansible.builtin.assert:
+        that: verify_ssh_bound.stdout == 'bound'
+        fail_msg: >-
+          Nothing is listening on port {{ ssh_port }}. On a socket-activated host this is
+          usually ssh.service and ssh.socket fighting for the port -- check
+          `systemctl status ssh.socket ssh.service`.
+        success_msg: "SSH is listening on {{ ssh_port }} and reachable from here."
+
+    - name: Read the nftables ruleset
+      ansible.builtin.command: nft list ruleset
+      register: verify_nft
+      changed_when: false
+
+    - name: Assert the firewall defaults to drop and does not expose the cluster
+      ansible.builtin.assert:
+        that:
+          - "'policy drop' in verify_nft.stdout"
+          - "'6443' not in verify_nft.stdout"
+          - "'9100' not in verify_nft.stdout"
+        fail_msg: "nftables is not default-drop, or it exposes 6443/9100 to the internet."
+        success_msg: "nftables: default drop; kube-apiserver and node-exporter unexposed."
+
+    - name: Read the passwd database
+      ansible.builtin.getent:
+        database: passwd
+
+    - name: Assert the deploy user exists
+      ansible.builtin.assert:
+        that: deploy_user in ansible_facts.getent_passwd
+        fail_msg: "{{ deploy_user }} does not exist."
+        success_msg: "{{ deploy_user }} exists."
+
+    - name: Confirm the deploy user still has passwordless sudo
+      ansible.builtin.command: sudo -n true
+      become: true
+      become_user: "{{ deploy_user }}"
+      changed_when: false
+
+    - name: Assert node-exporter listens on loopback only
+      ansible.builtin.shell:
+        cmd: set -o pipefail && ss -ltnp | grep ':9100' || true
+        executable: /bin/bash
+      register: verify_node_exporter
+      changed_when: false
+
+    - name: Assert 9100 is not bound to a public address
+      ansible.builtin.assert:
+        that:
+          - "'127.0.0.1:9100' in verify_node_exporter.stdout"
+          - "'0.0.0.0:9100' not in verify_node_exporter.stdout"
+        fail_msg: >-
+          node-exporter is not bound to loopback. Host metrics are reachable from
+          outside the machine.
+        success_msg: "node-exporter: 127.0.0.1:9100 only."
+
+    - name: Collect service state
+      ansible.builtin.service_facts:
+
+    - name: Assert the security services are running
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['fail2ban.service'].state == 'running'
+          - ansible_facts.services['unattended-upgrades.service'].state == 'running'
+          - ansible_facts.services['nftables.service'].status == 'enabled'
+        fail_msg: "fail2ban, unattended-upgrades, or nftables is not active."
+        success_msg: "fail2ban and unattended-upgrades running; nftables enabled."
+
+    - name: Assert the root filesystem has headroom
+      # On a single node a full / presents as ten unrelated Kubernetes failures at once.
+      # 20% is the threshold at which you still have time to react.
+      ansible.builtin.assert:
+        # ansible_facts['mounts'], not ansible_mounts: top-level fact injection is
+        # deprecated and goes away in ansible-core 2.24.
+        that: >-
+          (ansible_facts['mounts'] | selectattr('mount', 'equalto', '/') | first).size_available
+          / (ansible_facts['mounts'] | selectattr('mount', 'equalto', '/') | first).size_total > 0.2
+        fail_msg: "Less than 20% free on / -- this is how single-node clusters die."
+        success_msg: "Root filesystem has more than 20% free."

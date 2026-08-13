@@ -1,0 +1,19 @@
+---
+ssh_hardening_port: "{{ ssh_port | default(22) }}"
+ssh_hardening_user: "{{ deploy_user | default('deploy') }}"
+
+# sshd takes the FIRST value it obtains for a keyword and ignores every later one, and
+# /etc/ssh/sshd_config.d/*.conf is included in lexical order. This image ships
+# 50-cloud-init.conf with `PasswordAuthentication yes`, which is why a conventionally
+# named 99-hardening.conf would apply cleanly, report `changed`, and do nothing at all.
+# 00- sorts before everything, so our values are the ones that win.
+ssh_hardening_dropin: /etc/ssh/sshd_config.d/00-hardening.conf
+
+# Drop-ins written by the cloud image that contradict the above. Removed so the
+# effective config matches what a reader of our template would expect.
+ssh_hardening_conflicting_dropins:
+  - /etc/ssh/sshd_config.d/50-cloud-init.conf
+
+ssh_hardening_max_auth_tries: 3
+ssh_hardening_client_alive_interval: 300
+ssh_hardening_client_alive_count_max: 2

@@ -1,0 +1,11 @@
+---
+# Restarting k3s restarts the whole control plane. Pods keep running -- containerd is not
+# restarted with it -- but the API is unavailable for a few seconds, so anything watching
+# (Argo CD, Prometheus) will log a blip. That is fine, and worth knowing before you see it
+# in stage 08 and go looking for a cause.
+- name: Restart k3s
+  ansible.builtin.systemd_service:
+    name: k3s
+    state: restarted
+    daemon_reload: true
+  become: true

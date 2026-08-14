@@ -129,3 +129,58 @@
           / (ansible_facts['mounts'] | selectattr('mount', 'equalto', '/') | first).size_total > 0.2
         fail_msg: "Less than 20% free on / -- this is how single-node clusters die."
         success_msg: "Root filesystem has more than 20% free."
+
+    # ── cluster ──────────────────────────────────────────────────────────────────
+    # Scoped to k3s_servers so this play still passes on a host that is not a control
+    # plane -- an agent, or the node before stage 03 ran.
+
+    - name: Assert k3s is running
+      ansible.builtin.assert:
+        that: ansible_facts.services['k3s.service'].state == 'running'
+        fail_msg: "k3s is not running. `journalctl -u k3s -n 200`, but check `df -h` first."
+        success_msg: "k3s is running."
+      when: inventory_hostname in groups['k3s_servers']
+
+    - name: Wait for the node to report Ready
+      # `kubectl wait`, never `get -o jsonpath={...[?(@.type=="Ready")]...}`: the command
+      # module shlex-splits and strips the quotes around "Ready", so the filter fails
+      # against a perfectly healthy cluster. See roles/k3s-server/tasks/main.yml.
+      ansible.builtin.command: >-
+        k3s kubectl wait --for=condition=Ready
+        node/{{ k3s_node_name | default(inventory_hostname) }} --timeout=15s
+      register: verify_node_ready
+      changed_when: false
+      failed_when: false
+      when: inventory_hostname in groups['k3s_servers']
+
+    - name: Assert the node is Ready under the name we expect
+      # Under the name we EXPECT is the point. k3s registers by hostname unless node-name
+      # says otherwise; this host's hostname is vmi3503241. If the config file ever stops
+      # being applied, the cluster stays healthy and every reference to the node by name
+      # silently breaks -- so assert the name, not just the health.
+      ansible.builtin.assert:
+        that: verify_node_ready.rc == 0
+        fail_msg: >-
+          Node {{ k3s_node_name | default(inventory_hostname) }} is not Ready, or is not
+          registered under that name. kubectl said: {{ verify_node_ready.stderr | default('') }}
+        success_msg: "k3s node {{ k3s_node_name | default(inventory_hostname) }} is Ready."
+      when: inventory_hostname in groups['k3s_servers']
+
+    - name: Look for the addons that should have been disabled
+      ansible.builtin.find:
+        paths: /var/lib/rancher/k3s/server/manifests
+        patterns: "traefik*.yaml,svclb*.yaml"
+      register: verify_addons
+      when: inventory_hostname in groups['k3s_servers']
+
+    - name: Assert traefik and servicelb are not installed
+      # --disable only applies at install time. If these manifests come back, someone
+      # reinstalled k3s without the config file, and stage 04's ingress-nginx will lose
+      # the race for :80 in a way that looks like an ingress bug for about an hour.
+      ansible.builtin.assert:
+        that: verify_addons.files | length == 0
+        fail_msg: >-
+          Disabled addons are present: {{ verify_addons.files | map(attribute='path') | join(', ') }}.
+          ingress-nginx will fight traefik for ports 80/443.
+        success_msg: "traefik and servicelb are absent, as configured."
+      when: inventory_hostname in groups['k3s_servers']

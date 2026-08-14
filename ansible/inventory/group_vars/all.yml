@@ -18,3 +18,20 @@ public_tcp_ports:
   - 443
 
 timezone: UTC
+
+# Every staging hostname hangs off this. The apex revealroll.com is Vercel production and
+# is never served from this cluster.
+base_domain: stg.revealroll.com
+
+# SANs are baked into the kube-apiserver serving certificate at INSTALL time and cannot be
+# added later without regenerating certs. Listing the public IP and the hostnames now costs
+# nothing and keeps "allow 6443 from my home IP" a firewall change rather than a k3s
+# reinstall. 127.0.0.1 is always included by k3s itself, which is what makes the SSH tunnel
+# in scripts/fetch-kubeconfig.sh work without any SAN of ours.
+#
+# This lives here, not in roles/k3s-server/defaults, because ansible_host is inventory data:
+# a role that hardcodes one server's IP is not a role.
+k3s_tls_sans:
+  - "{{ ansible_host }}"
+  - "{{ base_domain }}"
+  - "argocd.{{ base_domain }}"

@@ -318,6 +318,44 @@ deleted rather than left as misleading dead files. The blanket `*.tfvars` ignore
 
 ---
 
+## 011 — kube-apiserver reached over an SSH tunnel, not an allowlisted 6443
+
+**Date:** 2026-08-13
+**Status:** accepted
+
+**Context:** `kubectl` has to reach the API server from a laptop, but `roles/firewall` is
+default-drop and opens only SSH, 80 and 443 — and `playbooks/99-verify.yml` *asserts* that 6443 never
+appears in the ruleset. Something had to give: either the kubeconfig goes through a tunnel, or the
+firewall grows a hole and the assertion is relaxed. This is a single-node cluster with one operator on
+a residential connection, so there is no VPN or bastion already in the picture.
+
+**Decision:** 6443 stays closed to the internet. `scripts/fetch-kubeconfig.sh` writes a kubeconfig
+pointing at `https://127.0.0.1:6443`, and `make tunnel` forwards that through SSH. The kube-apiserver
+is reachable only by someone who already holds an SSH key for the `deploy` user.
+
+**Alternatives considered:**
+- *Allow 6443 from a single home IP in the nftables role* — one line, no tunnel, no second terminal.
+  Rejected on three counts: a residential IP is not static, so the rule silently stops matching and
+  the fix always happens under pressure; it puts the API server's authentication on the internet where
+  a client-cert bug is remotely reachable rather than merely locally reachable; and it forces
+  `99-verify.yml` to stop asserting 6443 is closed, which removes the check that would notice if it
+  were opened by accident later. The tunnel costs one terminal and gives up nothing.
+- *Tailscale or a WireGuard mesh* — the right answer for a team, and genuinely nicer to use. Rejected
+  as scope: it adds a daemon, an account, and a second identity system to a single-node staging box,
+  none of which this project is trying to teach.
+
+**Consequences:**
+- Every `kubectl` session needs `make tunnel` running. That friction is real and is the price.
+- Terraform's `02-cluster-bootstrap` stack talks to the cluster through the same tunnel, so it must be
+  up before `terraform apply` in Stage 04. Expect to be reminded of this exactly once.
+- The reversal is deliberately cheap and pre-built: the public IP and both hostnames are already in
+  `k3s_tls_sans`, so the certificate is valid for direct access *today*. Opening 6443 later is a
+  firewall change plus `K3S_DIRECT=1` on the fetch script — not a k3s reinstall. That is the whole
+  reason the SANs were listed at install time even though nothing uses them yet.
+- The thing to remember: **SANs are an install-time decision, everything else about this is not.**
+
+---
+
 ## Template for new entries
 
 ```markdown

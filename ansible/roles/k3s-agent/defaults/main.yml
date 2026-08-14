@@ -1,0 +1,22 @@
+---
+# Sibling of roles/k3s-server rather than a `when: k3s_role == 'agent'` branch inside it.
+# The two roles share an installer and nothing else: an agent has no config to disable
+# addons in, no TLS SANs, and two required variables a server does not have. Branching
+# would make both harder to read to save one directory.
+#
+# This role has never been run. It exists so that adding a worker in three months is:
+# a node in Terraform, a line in the inventory, `site.yml` -- and not an afternoon of
+# rediscovering how the node-token works.
+
+k3s_version: v1.34.10+k3s1
+
+k3s_installer_url: https://get.k3s.io
+k3s_installer_path: /usr/local/bin/k3s-install.sh
+
+k3s_node_name: "{{ inventory_hostname }}"
+
+# Both are set by playbooks/20-k3s.yml from the server, not configured by hand.
+#   k3s_agent_server_url -- https://<server-ip>:6443
+#   k3s_agent_token      -- contents of /var/lib/rancher/k3s/server/node-token
+k3s_agent_server_url: ""
+k3s_agent_token: ""

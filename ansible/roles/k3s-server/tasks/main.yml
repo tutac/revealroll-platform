@@ -1,0 +1,165 @@
+---
+# k3s installs with one curl-to-shell. The reason this is a role instead is that the
+# install-time flags ARE the cluster's configuration, and configuration you cannot
+# reproduce is configuration you do not control. In stage 10 this node gets destroyed on
+# purpose; that drill only works because this file exists.
+
+- name: Ensure the k3s config directory exists
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Written BEFORE the installer runs, so the very first start already has the right flags.
+# Getting --disable=traefik in after the fact means deleting manifests and HelmChart
+# resources by hand; getting --tls-san in after the fact means regenerating certs.
+- name: Write the k3s server configuration
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart k3s
+
+- name: Check whether the k3s binary is present
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary
+
+# Not installed is a normal state on the first run, not an error -- hence failed_when.
+- name: Read the installed k3s version
+  ansible.builtin.command: k3s --version
+  register: k3s_version_check
+  changed_when: false
+  failed_when: false
+  when: k3s_binary.stat.exists
+
+- name: Decide whether the installer needs to run
+  # The installer is not idempotent: it always downloads, always rewrites the systemd
+  # unit, always reports success. Everything below is gated on this one fact so that a
+  # second site.yml run reports changed=0 -- which is the actual acceptance test for the
+  # stage, and the thing a naive `shell: curl ... | sh` can never pass.
+  ansible.builtin.set_fact:
+    k3s_install_required: >-
+      {{ k3s_version | default('') not in (k3s_version_check.stdout | default('')) }}
+
+- name: Download the k3s installer
+  ansible.builtin.get_url:
+    url: "{{ k3s_installer_url }}"
+    dest: "{{ k3s_installer_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  when: k3s_install_required | bool
+
+- name: Install k3s server
+  # INSTALL_K3S_EXEC carries only the subcommand. Every actual flag lives in
+  # /etc/rancher/k3s/config.yaml above, so changing one is a template diff and a restart
+  # rather than a reinstall.
+  ansible.builtin.command: "{{ k3s_installer_path }}"
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: server
+  changed_when: true
+  when: k3s_install_required | bool
+
+- name: Ensure k3s is enabled and running
+  ansible.builtin.systemd_service:
+    name: k3s
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# Handlers normally run at the end of the play. The readiness check below is meaningless
+# against an API server that is about to be restarted by a pending config change, so the
+# restart is forced to happen first.
+- name: Apply any pending k3s restart before checking readiness
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for the node to register and report Ready
+  # `k3s kubectl` rather than `kubectl`: the binary is guaranteed present and needs no
+  # KUBECONFIG. On a fresh install this loops while the node object is created and the
+  # kubelet posts ready status.
+  #
+  # `kubectl wait`, NOT `get -o jsonpath={...[?(@.type=="Ready")]...}`. The command module
+  # shlex-splits its arguments, which strips the double quotes around "Ready" before
+  # kubectl sees them -- the filter then references a bare identifier and fails on every
+  # retry, against a cluster that is perfectly healthy. Cost: 40 retries and an evening.
+  # Anything needing quotes inside a command: is a trap; either use shell: with real
+  # quoting, or pick a form that needs none. This one needs none.
+  ansible.builtin.command: >-
+    k3s kubectl wait --for=condition=Ready
+    node/{{ k3s_node_name }} --timeout={{ k3s_ready_timeout }}
+  register: k3s_node_ready
+  until: k3s_node_ready.rc == 0
+  retries: "{{ k3s_ready_retries }}"
+  delay: "{{ k3s_ready_delay }}"
+  changed_when: false
+  failed_when: false
+
+# A retry loop that hides stderr is a loop that costs you a round trip: you learn only
+# that the thing did not happen, never why. Everything below runs ONLY on failure, so the
+# happy path is unchanged and a broken run explains itself in the same output.
+- name: Collect diagnostics when the node did not come up Ready
+  when: k3s_node_ready.rc != 0
+  block:
+    - name: List every node the cluster knows about
+      # The wait above asks for ONE node by name. If k3s registered under a different name
+      # -- the provider's hostname instead of node-name -- that query can never succeed no
+      # matter how healthy the cluster is. This line separates "my check is wrong" from
+      # "the cluster is broken", which are opposite fixes.
+      ansible.builtin.command: k3s kubectl get nodes -o wide
+      register: k3s_diag_nodes
+      changed_when: false
+      failed_when: false
+
+    - name: Read the node conditions
+      ansible.builtin.command: k3s kubectl describe nodes
+      register: k3s_diag_describe
+      changed_when: false
+      failed_when: false
+
+    - name: Read disk usage
+      # First, always. On a single node a full / presents as ten unrelated Kubernetes
+      # failures at once, and NotReady is one of them.
+      ansible.builtin.command: df -h /
+      register: k3s_diag_disk
+      changed_when: false
+
+    - name: Read the last k3s journal lines
+      ansible.builtin.command: journalctl -u k3s -n 40 --no-pager
+      register: k3s_diag_journal
+      changed_when: false
+      failed_when: false
+
+    - name: Show what the node actually looks like
+      ansible.builtin.debug:
+        msg: |
+          ---- df -h / ----
+          {{ k3s_diag_disk.stdout }}
+
+          ---- kubectl get nodes -o wide ----
+          {{ k3s_diag_nodes.stdout | default('') }}
+          {{ k3s_diag_nodes.stderr | default('') }}
+
+          ---- node conditions ----
+          {{ k3s_diag_describe.stdout | default('') | regex_search('Conditions:[\s\S]*?Addresses:') }}
+
+          ---- journalctl -u k3s -n 40 ----
+          {{ k3s_diag_journal.stdout | default('') }}
+
+          ---- what the wait itself said ----
+          {{ k3s_node_ready.stderr | default('') }}
+
+- name: Assert the node came up Ready
+  ansible.builtin.assert:
+    that: k3s_node_ready.rc == 0
+    fail_msg: >-
+      Node {{ k3s_node_name }} never reached Ready. The diagnostics above are the whole
+      answer: if `get nodes` lists a Ready node under a DIFFERENT name, k3s_node_name does
+      not match what k3s registered. If it lists nothing, or NotReady, read the conditions
+      and then the journal.
+    success_msg: "k3s node {{ k3s_node_name }} is Ready."

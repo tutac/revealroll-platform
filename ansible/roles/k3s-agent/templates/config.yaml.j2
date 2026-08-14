@@ -1,0 +1,8 @@
+# MANAGED BY ANSIBLE -- roles/k3s-agent. Hand edits are lost on the next run.
+#
+# Mode 0600: the token in here joins any machine that holds it to the cluster as a node.
+# It is not a password you can rotate cheaply -- changing it means re-joining every agent.
+
+node-name: {{ k3s_node_name }}
+server: {{ k3s_agent_server_url }}
+token: {{ k3s_agent_token }}

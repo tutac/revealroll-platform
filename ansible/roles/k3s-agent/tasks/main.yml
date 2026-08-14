@@ -1,0 +1,71 @@
+---
+- name: Assert the agent has a server to join
+  # Fail here, with a sentence, rather than 90 seconds later inside the installer with a
+  # connection error that does not say which variable was empty.
+  ansible.builtin.assert:
+    that:
+      - k3s_agent_server_url | length > 0
+      - k3s_agent_token | length > 0
+    fail_msg: >-
+      k3s_agent_server_url / k3s_agent_token are empty. They are set by
+      playbooks/20-k3s.yml from the server host -- an agent play that does not run the
+      node-token lookup first cannot work.
+
+- name: Ensure the k3s config directory exists
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Write the k3s agent configuration
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart k3s-agent
+
+- name: Check whether the k3s binary is present
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary
+
+- name: Read the installed k3s version
+  ansible.builtin.command: k3s --version
+  register: k3s_version_check
+  changed_when: false
+  failed_when: false
+  when: k3s_binary.stat.exists
+
+- name: Decide whether the installer needs to run
+  ansible.builtin.set_fact:
+    k3s_install_required: >-
+      {{ k3s_version | default('') not in (k3s_version_check.stdout | default('')) }}
+
+- name: Download the k3s installer
+  ansible.builtin.get_url:
+    url: "{{ k3s_installer_url }}"
+    dest: "{{ k3s_installer_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  when: k3s_install_required | bool
+
+- name: Install k3s agent
+  ansible.builtin.command: "{{ k3s_installer_path }}"
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: agent
+  changed_when: true
+  when: k3s_install_required | bool
+
+- name: Ensure k3s-agent is enabled and running
+  ansible.builtin.systemd_service:
+    name: k3s-agent
+    enabled: true
+    state: started
+    daemon_reload: true

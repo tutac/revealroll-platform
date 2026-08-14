@@ -9,6 +9,10 @@ INVENTORY  ?= inventory/staging.yml
 KUBECONFIG_PATH ?= $(HOME)/.kube/revealroll-staging.yaml
 DOMAIN     ?= stg.revealroll.com
 
+# Must match ansible_port / ansible_user in ansible/inventory/staging.yml.
+SSH_PORT   ?= 22
+SSH_USER   ?= deploy
+
 ## ───────────────────────────── help ─────────────────────────────
 
 help: ## Show this help
@@ -60,8 +64,13 @@ idempotency: ## Prove Ansible is idempotent — the second run must report chang
 ## ──────────────────────────── cluster ───────────────────────────
 
 kubeconfig: ## Fetch the kubeconfig from the node
-	./scripts/fetch-kubeconfig.sh
-	@echo "  export KUBECONFIG=$(KUBECONFIG_PATH)"
+	@KUBECONFIG_PATH=$(KUBECONFIG_PATH) SSH_PORT=$(SSH_PORT) SSH_USER=$(SSH_USER) \
+	  ./scripts/fetch-kubeconfig.sh
+
+tunnel: ## Open the SSH tunnel to the kube-apiserver — 6443 is firewalled shut on purpose
+	@HOST=$$(./scripts/fetch-kubeconfig.sh --print-host); \
+	echo "→ 127.0.0.1:6443 → $$HOST:6443   (ctrl-c to close; leave this terminal open)"; \
+	ssh -p $(SSH_PORT) -L 6443:127.0.0.1:6443 -N $(SSH_USER)@$$HOST
 
 nodes: ## Show cluster nodes
 	@KUBECONFIG=$(KUBECONFIG_PATH) kubectl get nodes -o wide

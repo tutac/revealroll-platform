@@ -5,7 +5,8 @@
 Rows name **files and symbols, not line numbers** — line numbers go stale on the very next edit and
 then actively mislead. If you move or rename something listed here, fix the row in the same commit.
 
-The **Stage** column says when that file first gets real content. Rows marked ⏳ don't exist yet —
+The **Stage** column says when that file first gets real content. ✅ means that stage is verified and
+the file is real; rows marked ⏳ don't exist yet —
 they're the plan, and that's deliberate: the map was written before the code so the shape is decided
 in advance rather than by whatever was nearest at 11 p.m.
 
@@ -39,17 +40,19 @@ jurisdiction. The plain `<account>.r2.cloudflarestorage.com` returns `AccessDeni
 
 | What | File | Symbol / key | Stage |
 |------|------|--------------|-------|
-| **Open a firewall port** | `ansible/roles/firewall/templates/nftables.conf.j2` | `chain input` accept rules | ⏳ 02 |
-| Change the SSH port | `ansible/inventory/group_vars/all.yml` | `ssh_port` (then `ansible_port` in inventory) | ⏳ 02 |
-| Harden / unharden sshd | `ansible/roles/ssh-hardening/templates/99-hardening.conf.j2` | all | ⏳ 02 |
-| Install a package on the host | `ansible/roles/common/tasks/main.yml` | the `apt` task's `loop` | ⏳ 02 |
-| Journald / log size caps | `ansible/roles/common/tasks/main.yml` | `SystemMaxUse`, `SystemMaxFileSize` | ⏳ 02 |
-| fail2ban tuning, unban an IP | `ansible/roles/fail2ban/templates/jail.local.j2` | `maxretry`, `bantime`, `ignoreip` | ⏳ 02 |
-| **Change k3s install flags** | `ansible/roles/k3s-server/defaults/main.yml` | `k3s_version`, `k3s_disable`, `k3s_tls_sans` | ⏳ 03 |
-| Add a TLS SAN (new hostname for the API) | `ansible/inventory/group_vars/all.yml` | `k3s_tls_sans` | ⏳ 03 |
-| The host inventory (IP, user, port) | `ansible/inventory/staging.yml` | **gitignored**; `.example` is committed | ⏳ 02 |
-| Ansible secrets | `ansible/inventory/group_vars/vault.yml` | `ansible-vault edit` | ⏳ 02 |
-| Assertions that hardening held | `ansible/playbooks/99-verify.yml` | `ansible.builtin.assert` tasks | ⏳ 02 |
+| **Open a firewall port** | `ansible/roles/firewall/templates/nftables.conf.j2` | `chain input` accept rules | ✅ 02 |
+| Change the SSH port | `ansible/inventory/group_vars/all.yml` | `ssh_port` (then `ansible_port` in inventory) | ✅ 02 |
+| Harden / unharden sshd | `ansible/roles/ssh-hardening/templates/00-hardening.conf.j2` | all — **`00-`, not `99-`**: sshd drop-ins resolve in lexical order and the FIRST value wins | ✅ 02 |
+| Install a package on the host | `ansible/roles/common/tasks/main.yml` | the `apt` task's `loop` | ✅ 02 |
+| Journald / log size caps | `ansible/roles/common/tasks/main.yml` | `SystemMaxUse`, `SystemMaxFileSize` | ✅ 02 |
+| fail2ban tuning, unban an IP | `ansible/roles/fail2ban/templates/jail.local.j2` | `maxretry`, `bantime`, `ignoreip` | ✅ 02 |
+| **Change the k3s version** | `ansible/roles/k3s-server/defaults/main.yml` | `k3s_version` — bump, then `site.yml` | ✅ 03 |
+| **Change a k3s runtime flag** | `ansible/roles/k3s-server/templates/config.yaml.j2` | flags live in `/etc/rancher/k3s/config.yaml`, not the systemd unit — a change is a diff + restart, not a reinstall | ✅ 03 |
+| Add a TLS SAN (new hostname for the API) | `ansible/inventory/group_vars/all.yml` | `k3s_tls_sans` — ⚠ existing certs are **not** reissued; delete `serving-kube-apiserver.{crt,key}` and restart | ✅ 03 |
+| Add a worker node | `ansible/inventory/staging.yml` → `k3s_agents` | `roles/k3s-agent` + the node-token slurp in `playbooks/20-k3s.yml` already exist | ✅ 03 |
+| The host inventory (IP, user, port) | `ansible/inventory/staging.yml` | **gitignored**; `.example` is committed | ✅ 02 |
+| Ansible secrets | `ansible/inventory/group_vars/vault.yml` | `ansible-vault edit` | ✅ 02 |
+| Assertions that hardening held | `ansible/playbooks/99-verify.yml` | `ansible.builtin.assert` tasks | ✅ 02 |
 
 ⚠️ **Order matters** in `ansible/playbooks/10-harden.yml`: `firewall` runs *before* `ssh-hardening`,
 so the new SSH port is open before sshd moves to it. Swapping them locks you out.
@@ -123,7 +126,7 @@ That is the only sanctioned manual apply in this repo.
 | Where alerts are delivered | `gitops/apps/_values/kube-prometheus-stack.yaml` | `alertmanager.config.receivers` | ⏳ 08 |
 | **Log retention** | `gitops/apps/_values/loki.yaml` | `limits_config.retention_period` **and** `compactor.retention_enabled` | ⏳ 08 |
 | Which logs get collected | `gitops/apps/_values/alloy.yaml` | the discovery/relabel rules | ⏳ 08 |
-| Host metrics (survive cluster death) | `ansible/roles/node-exporter/` | systemd unit, binds `127.0.0.1:9100` | ⏳ 02 |
+| Host metrics (survive cluster death) | `ansible/roles/node-exporter/` | systemd unit, binds `127.0.0.1:9100` | ✅ 02 |
 | SLO definitions | `docs/slo.md` | the PromQL, not the prose | ⏳ 10 |
 
 ⚠️ Loki retention needs **both** `retention_period` and `compactor.retention_enabled: true`.
@@ -165,7 +168,8 @@ undecryptable. It is backed up in the password manager. Re-back-up after any con
 
 | What | File | Stage |
 |------|------|-------|
-| Get a kubeconfig on your laptop | `scripts/fetch-kubeconfig.sh` | ⏳ 03 |
+| Get a kubeconfig on your laptop | `scripts/fetch-kubeconfig.sh` | ✅ 03 |
+| Reach the kube-apiserver at all | `make tunnel` — 6443 is closed on purpose (decision 011) | ✅ 03 |
 | Seal a whole `.env` into one SealedSecret | `scripts/seal-env.sh` | ⏳ 05 |
 | Is the site up and is the cert healthy | `scripts/smoke.sh` | ⏳ 06 |
 | Back up etcd + the sealing key to R2 | `scripts/backup-etcd.sh` | ⏳ 10 |

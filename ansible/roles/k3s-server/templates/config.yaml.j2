@@ -1,0 +1,27 @@
+# MANAGED BY ANSIBLE -- roles/k3s-server. Hand edits are lost on the next run.
+#
+# k3s reads this file on every start, so the flags live here rather than in
+# INSTALL_K3S_EXEC. That difference matters: flags baked into the systemd unit by the
+# installer can only be changed by re-running the installer, which makes "add a SAN" a
+# reinstall. As a file, a flag change is a diff, a handler, and a restart.
+#
+# CAVEAT, worth knowing before you need it: adding a tls-san here does NOT retroactively
+# reissue the serving certificate. k3s only regenerates it if it is missing. To add a SAN
+# to a running cluster:
+#     rm /var/lib/rancher/k3s/server/tls/serving-kube-apiserver.{crt,key}
+#     systemctl restart k3s
+# The x509 error you get without this names the SANs it DOES have, which is the fastest
+# confirmation you have hit exactly this.
+
+node-name: {{ k3s_node_name }}
+write-kubeconfig-mode: "{{ k3s_write_kubeconfig_mode }}"
+
+disable:
+{% for addon in k3s_disable %}
+  - {{ addon }}
+{% endfor %}
+
+tls-san:
+{% for san in k3s_server_tls_sans %}
+  - {{ san }}
+{% endfor %}

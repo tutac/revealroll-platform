@@ -1,0 +1,42 @@
+---
+# Pin the version. The installer at get.k3s.io always fetches "latest" unless told
+# otherwise, which means an unpinned role silently upgrades your control plane the next
+# time someone runs site.yml -- six months from now, for an unrelated reason, at 23:00.
+#
+# v1.34.x is n-2 at the time of writing (n = 1.36). Deliberately boring: every Helm chart
+# stages 04-08 install (ingress-nginx, cert-manager, kube-prometheus-stack) has had months
+# of exposure to it. Bump this variable, run site.yml, done -- that is the whole point of
+# the flags living in code.
+k3s_version: v1.34.10+k3s1
+
+k3s_installer_url: https://get.k3s.io
+k3s_installer_path: /usr/local/bin/k3s-install.sh
+
+# Bundled addons we do not want.
+#   traefik   -- ingress-nginx (stage 04) needs :80/:443. Two ingress controllers racing
+#                for the same host ports is a bad evening with very misleading symptoms.
+#   servicelb -- klipper implements type=LoadBalancer by binding host ports. ingress-nginx
+#                does its own hostPort binding, and having both is confusing rather than
+#                redundant.
+k3s_disable:
+  - traefik
+  - servicelb
+
+# 0644 is a deliberate, single-operator trade-off: it lets the deploy user run
+# `k3s kubectl get/describe/logs` for read-only triage without sudo, which is step 4 of the
+# triage order in CLAUDE.md. On a host with more than one human, use 0600.
+k3s_write_kubeconfig_mode: "0644"
+
+k3s_node_name: "{{ inventory_hostname }}"
+
+# Role default falls back to the shared list in inventory/group_vars/all.yml, so there is
+# still exactly one place to change a SAN. Same pattern as roles/firewall/defaults.
+k3s_server_tls_sans: "{{ k3s_tls_sans | default([]) }}"
+
+# How long to wait for the node to report Ready after a fresh install. `kubectl wait`
+# blocks for k3s_ready_timeout; the retries exist for the window BEFORE the node object
+# exists at all, when wait exits immediately with "nodes not found" rather than blocking.
+# Worst case here is 20 * (15s + 5s) ≈ 6 minutes.
+k3s_ready_timeout: 15s
+k3s_ready_retries: 20
+k3s_ready_delay: 5

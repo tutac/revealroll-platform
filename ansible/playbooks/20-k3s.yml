@@ -1,11 +1,42 @@
 ---
-# Stage 03 fills this in. It exists now only because site.yml imports it, and importing
-# an empty file is a hard error.
-- name: Install k3s (stage 03)
+# Two plays, one of which does nothing today.
+#
+# The agent play exists now, with an empty k3s_agents group, precisely BECAUSE there is no
+# second node. Written later, under pressure, with a worker already provisioned and
+# waiting, it is written badly. Written now it costs ten lines and makes "add a worker" a
+# Terraform node, an inventory line, and a site.yml run.
+
+- name: Install the k3s control plane
   hosts: k3s_servers
   become: true
-  gather_facts: false
-  tasks:
-    - name: Placeholder until the k3s-server role is written
-      ansible.builtin.debug:
-        msg: "k3s installation lands in stage 03 -- roles/k3s-server is still empty."
+  gather_facts: true
+  roles:
+    - k3s-server
+
+- name: Join k3s agents to the cluster
+  hosts: k3s_agents
+  become: true
+  gather_facts: true
+
+  # Skips cleanly with `hosts: {}` in the inventory -- Ansible reports "no hosts matched"
+  # and moves on. Confirm that stays true whenever you touch this file.
+  pre_tasks:
+    - name: Read the node-token from the server
+      # Delegated: the token only exists on the control plane, and it is 0600 root there.
+      # Deliberately NOT run_once -- every agent reads the same value, so the only thing
+      # run_once would buy is one fewer SSH round trip per worker, in exchange for
+      # order-dependent behaviour under the `free` strategy. Not a trade worth making.
+      ansible.builtin.slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      delegate_to: "{{ groups['k3s_servers'] | first }}"
+      register: k3s_node_token
+      no_log: true
+
+    - name: Set the join parameters for this agent
+      ansible.builtin.set_fact:
+        k3s_agent_server_url: "https://{{ hostvars[groups['k3s_servers'] | first].ansible_host }}:6443"
+        k3s_agent_token: "{{ k3s_node_token.content | b64decode | trim }}"
+      no_log: true
+
+  roles:
+    - k3s-agent

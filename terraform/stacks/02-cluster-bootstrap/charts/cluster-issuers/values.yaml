@@ -1,0 +1,10 @@
+# Every value here is supplied by Terraform (see issuers.tf). The defaults exist so that
+# `helm template` works standalone when you want to see the rendered manifests.
+email: ""
+ingressClassName: nginx
+
+issuers:
+  - name: letsencrypt-staging
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+  - name: letsencrypt-prod
+    server: https://acme-v02.api.letsencrypt.org/directory

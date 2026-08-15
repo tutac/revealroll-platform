@@ -1,0 +1,31 @@
+{{- range .Values.issuers }}
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .name }}
+spec:
+  acme:
+    server: {{ .server }}
+    email: {{ required "email is required -- Let's Encrypt sends expiry warnings here" $.Values.email | quote }}
+
+    # The ACME ACCOUNT key, not a certificate key. cert-manager creates this Secret on
+    # first use; losing it means re-registering with Let's Encrypt, which silently resets
+    # your rate-limit standing. Each issuer needs its own -- staging and prod are separate
+    # ACME accounts on separate servers.
+    privateKeySecretRef:
+      name: {{ .name }}-account-key
+
+    solvers:
+      # HTTP-01: cert-manager creates a temporary Ingress serving a token at
+      # /.well-known/acme-challenge/<token>, and Let's Encrypt fetches it over PLAIN HTTP
+      # on port 80. That is why port 80 stays open in the nftables role even though every
+      # real hostname redirects to HTTPS -- closing it breaks all renewals, roughly 60
+      # days after you close it, long after you would connect the two events.
+      #
+      # HTTP-01 also cannot issue wildcard certificates. The *.stg DNS record saves us
+      # adding a record per host; it does not save us a certificate per host.
+      - http01:
+          ingress:
+            ingressClassName: {{ $.Values.ingressClassName }}
+{{- end }}

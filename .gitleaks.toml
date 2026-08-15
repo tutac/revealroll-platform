@@ -25,4 +25,18 @@ rule, the answer is to rotate the credential and remove it, not to add a path he
 paths = [
   '''^\.envrc$''',
   '''^\.env(\..+)?$''',
+
+  # SealedSecrets. This one is different from the two above and the difference matters:
+  # these files ARE tracked by git, which the warning above says never to allowlist.
+  #
+  # The exception is legitimate because the content is ciphertext BY DESIGN. spec.encryptedData
+  # is RSA-encrypted against the cluster controller's public key; it is base64, so it looks
+  # exactly like an API key to a regex, and it is safe in a public repository precisely because
+  # only the in-cluster private key can read it. That is the entire point of Stage 05.
+  #
+  # What stops a genuine plaintext Secret being committed to this path is NOT this allowlist —
+  # it is scripts/seal-env.sh, which greps its own output for sk_test_/sk_live_/JWT shapes and
+  # refuses to write the file if it finds any. If you ever hand-write a file here instead of
+  # generating it, you have stepped outside that guard: read it before committing.
+  '''^secrets/.*-sealed\.yaml$''',
 ]

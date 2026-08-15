@@ -93,8 +93,14 @@ seal: ## Seal .env.staging into secrets/staging/ (never commits plaintext)
 	./scripts/seal-env.sh .env.staging revealroll
 
 backup-key: ## Back up the sealed-secrets private key — LOSE THIS AND ALL SECRETS DIE
-	@KUBECONFIG=$(KUBECONFIG_PATH) kubectl get secret -n kube-system \
+	@umask 077 && KUBECONFIG=$(KUBECONFIG_PATH) kubectl get secret -n kube-system \
 	  -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > $(HOME)/sealed-secrets-master.key
+	@# Refuse to report success on an empty or key-less file. A backup you never verified
+	@# is a backup you will discover is empty on the one day it matters.
+	@grep -q 'tls.key' $(HOME)/sealed-secrets-master.key \
+	  || { rm -f $(HOME)/sealed-secrets-master.key; \
+	       echo "✗ no sealing key found — is the controller running in kube-system?"; exit 1; }
+	@echo "  keys backed up: $$(grep -c 'tls.key' $(HOME)/sealed-secrets-master.key)"
 	@echo "✓ wrote $(HOME)/sealed-secrets-master.key — put it in your password manager, then delete it"
 
 ## ─────────────────────────── verify / lint ──────────────────────

@@ -1,0 +1,1046 @@
+<title>The Ansible Punch List</title>
+
+<style>
+  :root {
+    --ground:      #F1F3EF;
+    --surface:     #FAFBF8;
+    --surface-alt: #E8EBE5;
+    --ink:         #151E19;
+    --ink-mid:     #3D4B44;
+    --ink-mute:    #66746C;
+    --rule:        #D3D9CF;
+    --rule-soft:   #E2E7DE;
+    --accent:      #1C5A47;
+    --accent-soft: #DDEAE2;
+    --ok:          #2F7A4E;
+    --changed:     #8E6212;
+    --skipped:     #3A6A86;
+    --failed:      #A5382F;
+
+    --measure: 34rem;
+    --step--1: 0.8125rem;
+    --step-0:  1.0625rem;
+    --step-1:  1.3125rem;
+    --step-2:  1.75rem;
+    --step-3:  2.375rem;
+    --step-4:  3.25rem;
+
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0E1310;
+      --surface:     #151C17;
+      --surface-alt: #1C2520;
+      --ink:         #E3E9E3;
+      --ink-mid:     #B4BFB7;
+      --ink-mute:    #8B978F;
+      --rule:        #2A342D;
+      --rule-soft:   #212A24;
+      --accent:      #6FC0A0;
+      --accent-soft: #1B2E27;
+      --ok:          #5FB07E;
+      --changed:     #D5A445;
+      --skipped:     #6FA8C4;
+      --failed:      #E0736A;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0E1310;
+    --surface:     #151C17;
+    --surface-alt: #1C2520;
+    --ink:         #E3E9E3;
+    --ink-mid:     #B4BFB7;
+    --ink-mute:    #8B978F;
+    --rule:        #2A342D;
+    --rule-soft:   #212A24;
+    --accent:      #6FC0A0;
+    --accent-soft: #1B2E27;
+    --ok:          #5FB07E;
+    --changed:     #D5A445;
+    --skipped:     #6FA8C4;
+    --failed:      #E0736A;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: var(--step-0);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 62rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 5vw, 4.5rem) clamp(1.1rem, 4vw, 2.5rem) 6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 3.25rem;
+  }
+
+  /* ── masthead ─────────────────────────────────────────── */
+
+  .masthead { display: flex; flex-direction: column; gap: 1.25rem; }
+
+  .masthead h1 {
+    font-family: var(--sans);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.02;
+    font-size: clamp(2.25rem, 7vw, var(--step-4));
+    text-wrap: balance;
+    max-width: 20ch;
+  }
+
+  .standfirst {
+    max-width: var(--measure);
+    font-size: var(--step-1);
+    line-height: 1.55;
+    color: var(--ink-mid);
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: var(--step--1);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+
+  .masthead .eyebrow { color: var(--accent); }
+
+  .recap {
+    font-family: var(--mono);
+    font-size: var(--step--1);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1.4rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: var(--surface);
+    color: var(--ink-mid);
+  }
+  .recap b { font-weight: 500; }
+  .recap .s-ok      { color: var(--ok); }
+  .recap .s-changed { color: var(--changed); }
+  .recap .s-skipped { color: var(--skipped); }
+  .recap .s-failed  { color: var(--failed); }
+
+  /* ── sections ─────────────────────────────────────────── */
+
+  section { display: flex; flex-direction: column; gap: 1.15rem; }
+
+  section > h2 {
+    font-family: var(--sans);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    font-size: var(--step-2);
+    line-height: 1.15;
+    text-wrap: balance;
+    max-width: 24ch;
+    margin-top: 0.4rem;
+  }
+
+  section > h3 {
+    font-family: var(--sans);
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    font-size: var(--step-1);
+    line-height: 1.25;
+    margin-top: 0.75rem;
+  }
+
+  p { max-width: var(--measure); }
+  p + p { margin-top: -0.25rem; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--surface-alt);
+    padding: 0.1em 0.34em;
+    border-radius: 3px;
+    word-break: break-word;
+  }
+
+  strong { font-weight: 600; }
+
+  ul.plain {
+    max-width: var(--measure);
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding-left: 1.1rem;
+  }
+  ul.plain li { padding-left: 0.2rem; }
+  ul.plain li::marker { color: var(--accent); }
+
+  /* ── the seam between the two halves ──────────────────── */
+
+  .seam {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    padding: 2.25rem 0 0.5rem;
+    border-top: 2px solid var(--ink);
+  }
+  .seam h2 {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: var(--step-3);
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+    max-width: 18ch;
+  }
+
+  /* ── figures ──────────────────────────────────────────── */
+
+  figure {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    margin: 0.5rem 0;
+  }
+
+  .canvas {
+    overflow-x: auto;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: var(--surface);
+    padding: 1.15rem;
+  }
+
+  .canvas svg {
+    display: block;
+    width: 100%;
+    min-width: 34rem;
+    height: auto;
+    color: var(--ink);
+  }
+
+  figcaption {
+    font-family: var(--sans);
+    font-size: var(--step--1);
+    line-height: 1.5;
+    color: var(--ink-mute);
+    max-width: 62ch;
+  }
+
+  /* svg primitives */
+  .box  { fill: var(--surface); stroke: var(--rule); stroke-width: 1.5; }
+  .box-alt { fill: var(--surface-alt); stroke: var(--rule); stroke-width: 1.5; }
+  .box-accent { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+  .edge { stroke: var(--ink-mid); stroke-width: 1.5; fill: none; }
+  .edge-dash { stroke: var(--ink-mute); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+  .edge-accent { stroke: var(--accent); stroke-width: 2; fill: none; }
+  .t      { font-family: var(--sans); font-size: 13px; fill: var(--ink); }
+  .t-mono { font-family: var(--mono); font-size: 11.5px; fill: var(--ink-mid); }
+  .t-lbl  { font-family: var(--mono); font-size: 10.5px; fill: var(--ink-mute); letter-spacing: 0.09em; }
+  .t-hd   { font-family: var(--sans); font-size: 12px; font-weight: 700; fill: var(--ink); letter-spacing: 0.02em; }
+  .t-acc  { font-family: var(--mono); font-size: 11px; fill: var(--accent); }
+  .t-ok      { font-family: var(--mono); font-size: 11px; fill: var(--ok); }
+  .t-changed { font-family: var(--mono); font-size: 11px; fill: var(--changed); }
+  .t-skip    { font-family: var(--mono); font-size: 11px; fill: var(--skipped); }
+
+  /* ── table ────────────────────────────────────────────── */
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 4px; }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 40rem;
+    background: var(--surface);
+    font-family: var(--sans);
+    font-size: var(--step--1);
+    line-height: 1.5;
+  }
+  th, td {
+    text-align: left;
+    vertical-align: top;
+    padding: 0.7rem 0.9rem;
+    border-bottom: 1px solid var(--rule-soft);
+  }
+  thead th {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 500;
+    background: var(--surface-alt);
+    border-bottom: 1px solid var(--rule);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td code { background: none; padding: 0; color: var(--ink); }
+  td.what { color: var(--ink-mid); }
+
+  /* ── callouts ─────────────────────────────────────────── */
+
+  .note {
+    max-width: var(--measure);
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    padding: 0.9rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.97rem;
+  }
+  .note .eyebrow { color: var(--accent); }
+  .note p { max-width: none; }
+
+  .script {
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: var(--surface);
+    padding: 1.4rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    max-width: 46rem;
+  }
+  .script p { max-width: 58ch; }
+  .script ol {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding-left: 1.3rem;
+    max-width: 58ch;
+  }
+  .script li::marker { font-family: var(--mono); font-size: 0.85em; color: var(--accent); }
+
+  .pair {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1rem;
+  }
+  .card {
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: var(--surface);
+    padding: 1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .card h4 {
+    font-family: var(--mono);
+    font-size: var(--step--1);
+    font-weight: 500;
+    color: var(--accent);
+  }
+  .card p { font-size: 0.95rem; max-width: none; color: var(--ink-mid); }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 1.25rem;
+    font-family: var(--mono);
+    font-size: var(--step--1);
+    color: var(--ink-mute);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.5rem;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <div class="eyebrow">RevealRoll staging · stage 02–03 · the Ansible layer</div>
+    <h1>The punch list that builds a server</h1>
+    <p class="standfirst">
+      What Ansible actually did to the Contabo box — first in plain language for
+      anyone, then in the real file names for me.
+    </p>
+    <div class="recap">
+      <b>PLAY RECAP</b>
+      <span>staging-1</span>
+      <span class="s-ok">ok</span>
+      <span class="s-changed">changed=0 on the second run</span>
+      <span class="s-skipped">skipped</span>
+      <span class="s-failed">failed=0</span>
+    </div>
+  </header>
+
+  <!-- ══════════════ PART ONE: PLAIN LANGUAGE ══════════════ -->
+
+  <section>
+    <div class="eyebrow">Part one · for anyone</div>
+    <h2>Start with a building inspector</h2>
+    <p>
+      Imagine a house that has just been handed over by the builder, and an inspector
+      with a written list: <em>the front door has a deadbolt; the smoke alarm has a
+      battery; the back gate is locked; the boiler is switched on.</em>
+    </p>
+    <p>
+      The inspector walks the house with the list. For each line she checks the real
+      house against the sentence. Deadbolt already fitted? Nothing to do. No battery in
+      the alarm? She puts one in. At the end she reports how many lines were already
+      fine and how many she had to fix.
+    </p>
+    <p>
+      Walk the same list through the same house tomorrow and she fixes nothing, because
+      nothing has drifted. That is the entire idea behind Ansible, and it has a name:
+      <strong>idempotent</strong> — running it twice is the same as running it once.
+    </p>
+    <p>
+      Ansible is the list plus the inspector. I write down how the server should be. A
+      program on my laptop logs into the server, compares reality to the list, and
+      changes only what doesn't match.
+    </p>
+  </section>
+
+  <section>
+    <h2>Nothing is installed on the server</h2>
+    <p>
+      This is the part people find surprising. There is no Ansible daemon sitting on the
+      VPS waiting for orders. My laptop opens an ordinary SSH connection — the same one
+      a human would use — runs commands down it, and hangs up. The server has no idea it
+      was "managed."
+    </p>
+    <p>
+      Which means the list lives in Git, on my machine, in this repository. The server
+      is downstream of it. If the server vanished tomorrow, the description of it
+      wouldn't.
+    </p>
+
+    <figure>
+      <div class="canvas">
+        <svg viewBox="0 0 1000 330" role="img"
+             aria-label="A laptop holding inventory, variables, site.yml and roles connects over SSH as the deploy user to a Contabo VPS, writing configuration files there and receiving a per-task report of ok, changed or failed.">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <!-- control node -->
+          <rect class="box" x="8" y="46" width="286" height="252" rx="4"/>
+          <text class="t-lbl" x="24" y="34">CONTROL NODE</text>
+          <text class="t-hd"   x="24" y="76">My laptop</text>
+          <text class="t-mono" x="24" y="106">inventory/staging.yml</text>
+          <text class="t-lbl"  x="24" y="122">which machine, which user</text>
+          <text class="t-mono" x="24" y="150">group_vars/all.yml</text>
+          <text class="t-lbl"  x="24" y="166">facts every role shares</text>
+          <text class="t-mono" x="24" y="194">site.yml</text>
+          <text class="t-lbl"  x="24" y="210">the order things happen in</text>
+          <text class="t-mono" x="24" y="238">roles/</text>
+          <text class="t-lbl"  x="24" y="254">the punch list itself</text>
+          <text class="t-mono" x="24" y="282">~/.ssh/id_ed25519</text>
+
+          <!-- the wire -->
+          <line class="edge-accent" x1="300" y1="120" x2="638" y2="120" marker-end="url(#ar)" color="var(--accent)"/>
+          <text class="t-acc" x="316" y="110">ssh deploy@vps :22 — run this task</text>
+          <line class="edge-dash" x1="638" y1="196" x2="300" y2="196" marker-end="url(#ar)" color="var(--ink-mute)"/>
+          <text class="t-lbl" x="330" y="188">reply: ok / changed / failed</text>
+
+          <rect class="box-alt" x="330" y="228" width="278" height="46" rx="4"/>
+          <text class="t" x="350" y="248">No agent on the server.</text>
+          <text class="t-lbl" x="350" y="264">SSH is the whole transport.</text>
+
+          <!-- managed host -->
+          <rect class="box" x="644" y="46" width="348" height="252" rx="4"/>
+          <text class="t-lbl" x="660" y="34">MANAGED HOST</text>
+          <text class="t-hd"   x="660" y="76">Contabo VPS · staging-1</text>
+          <text class="t-lbl"  x="660" y="100">WHAT THE RUN LEAVES BEHIND</text>
+          <text class="t-mono" x="660" y="124">user: deploy (+ passwordless sudo)</text>
+          <text class="t-mono" x="660" y="150">/etc/ssh/sshd_config.d/00-hardening.conf</text>
+          <text class="t-mono" x="660" y="176">/etc/nftables.conf</text>
+          <text class="t-mono" x="660" y="202">/etc/fail2ban/jail.local</text>
+          <text class="t-mono" x="660" y="228">/etc/systemd/system/node_exporter.service</text>
+          <text class="t-mono" x="660" y="254">/etc/rancher/k3s/config.yaml</text>
+          <circle cx="666" cy="276" r="4" fill="var(--ok)"/>
+          <text class="t-ok" x="678" y="280">k3s.service — running</text>
+        </svg>
+      </div>
+      <figcaption>
+        One direction only: the laptop pushes, the server answers. Every file on the
+        right exists because a line on the left says it should.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>So what did I actually build?</h2>
+    <p>
+      Four passes over one machine, in a fixed order, each one assuming the previous
+      one finished:
+    </p>
+    <ul class="plain">
+      <li>
+        <strong>Give myself a way in that isn't root.</strong> Create a normal user
+        called <code>deploy</code>, put my laptop's key on it, let it become
+        administrator without typing a password.
+      </li>
+      <li>
+        <strong>Make the machine hard to break into.</strong> Turn off password logins
+        and root logins over SSH. Put up a firewall that drops everything except the
+        few ports that must be open. Install a service that bans IP addresses after
+        repeated failed logins. Cap how much disk the logs may eat. Let security
+        patches install themselves overnight, but nothing else.
+      </li>
+      <li>
+        <strong>Install Kubernetes.</strong> Specifically k3s — a small, single-binary
+        Kubernetes — pinned to one exact version, with two of its bundled extras
+        deliberately switched off because later stages install better replacements.
+      </li>
+      <li>
+        <strong>Prove all of the above, out loud.</strong> A final pass that changes
+        nothing and instead asserts: root login <em>is</em> off, the firewall
+        <em>does</em> default to drop, the node <em>is</em> Ready, the disk
+        <em>does</em> have headroom. If any sentence is false, the run fails.
+      </li>
+    </ul>
+    <p>
+      That last one is the difference between "I ran a script" and "I know what the
+      machine is." Everything before it is a claim; the fourth pass is the evidence.
+    </p>
+  </section>
+
+  <!-- ══════════════ SEAM ══════════════ -->
+
+  <div class="seam">
+    <div class="eyebrow">Part two · the real thing</div>
+    <h2>Now with the file names on</h2>
+    <p class="standfirst">
+      Same story, told in the vocabulary I'd need in an interview or a review —
+      the pieces of Ansible, the order they run, and the modules that do the work.
+    </p>
+  </div>
+
+  <section>
+    <h2>The vocabulary, from outside in</h2>
+    <p>
+      Ansible's nouns nest. Every one of them is a layer of the same object: a
+      description of desired state, scoped a little more narrowly than the layer
+      outside it.
+    </p>
+
+    <figure>
+      <div class="canvas">
+        <svg viewBox="0 0 900 360" role="img"
+             aria-label="Nested boxes: site.yml contains playbook 10-harden.yml, which contains a play targeting all hosts with become true, which contains the firewall role, which contains a task, which calls the template module.">
+          <rect class="box" x="8" y="26" width="884" height="326" rx="4"/>
+          <text class="t-lbl" x="24" y="18">MASTER PLAYBOOK</text>
+          <text class="t-mono" x="26" y="50">site.yml</text>
+          <text class="t-lbl"  x="140" y="50">imports the playbooks, in order</text>
+
+          <rect class="box-alt" x="30" y="66" width="840" height="270" rx="4"/>
+          <text class="t-mono" x="48" y="92">playbooks/10-harden.yml</text>
+          <text class="t-lbl"  x="250" y="92">a playbook — one file, one phase of the job</text>
+
+          <rect class="box" x="52" y="108" width="796" height="212" rx="4"/>
+          <text class="t-mono" x="70" y="134">hosts: all · become: true</text>
+          <text class="t-lbl"  x="290" y="134">a play — which machines, as whom</text>
+
+          <rect class="box-accent" x="74" y="150" width="752" height="152" rx="4"/>
+          <text class="t-mono" x="92" y="176" style="fill:var(--accent)">roles/firewall/</text>
+          <text class="t-lbl"  x="230" y="176">a role — one reusable concern, its own folder</text>
+
+          <rect class="box" x="96" y="192" width="708" height="94" rx="4"/>
+          <text class="t-mono" x="114" y="218">- name: Deploy the nftables ruleset</text>
+          <text class="t-lbl"  x="380" y="218">a task — one named unit of desired state</text>
+
+          <rect class="box-alt" x="118" y="234" width="664" height="38" rx="4"/>
+          <text class="t-mono" x="136" y="258">ansible.builtin.template:</text>
+          <text class="t-lbl"  x="330" y="258">a module — the code that inspects and fixes</text>
+        </svg>
+      </div>
+      <figcaption>
+        Only the innermost layer touches the machine. Everything outside it exists to
+        say <em>where</em>, <em>as whom</em>, and <em>in what order</em>.
+      </figcaption>
+    </figure>
+
+    <div class="pair">
+      <div class="card">
+        <h4>inventory/staging.yml</h4>
+        <p>
+          The machines and how to reach them. Two groups:
+          <code>k3s_servers</code> holds <code>staging-1</code>;
+          <code>k3s_agents</code> is deliberately empty. Gitignored — the committed
+          file is <code>.example</code>.
+        </p>
+      </div>
+      <div class="card">
+        <h4>group_vars/all.yml</h4>
+        <p>
+          Values more than one role needs: <code>deploy_user</code>,
+          <code>ssh_port</code>, <code>public_tcp_ports</code>,
+          <code>base_domain</code>, <code>k3s_tls_sans</code>. One place to change a
+          shared fact.
+        </p>
+      </div>
+      <div class="card">
+        <h4>roles/*/defaults/main.yml</h4>
+        <p>
+          Each role's own knobs at the lowest precedence, so the inventory can override
+          them. <code>k3s_version</code> lives here — that is why bumping Kubernetes is
+          a one-line diff.
+        </p>
+      </div>
+      <div class="card">
+        <h4>roles/*/templates/*.j2</h4>
+        <p>
+          Jinja2 files rendered with those variables and written to the host. The
+          firewall ruleset, the sshd drop-in, the fail2ban jail and the k3s config are
+          all templates, not static copies.
+        </p>
+      </div>
+      <div class="card">
+        <h4>roles/*/handlers/main.yml</h4>
+        <p>
+          Restarts that fire only when something above them actually changed. A task
+          <code>notify</code>s a handler; the handler runs once, at the end of the play.
+        </p>
+      </div>
+      <div class="card">
+        <h4>ansible.cfg</h4>
+        <p>
+          Run settings, not host settings. <code>pipelining</code> and
+          <code>ControlPersist=60s</code> reuse one TCP connection for the whole
+          play — on a 130&nbsp;ms link to Germany that is minutes.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The run, in order</h2>
+    <p>
+      <code>00-bootstrap.yml</code> is the only play that connects as <strong>root</strong>,
+      and it is deliberately <em>not</em> imported by <code>site.yml</code>. Its only job
+      is to create the account every later play connects as. The moment <code>deploy</code>
+      can <code>sudo</code>, it has no reason to run again — and the hardening play is
+      about to close root SSH behind it.
+    </p>
+
+    <figure>
+      <div class="canvas">
+        <svg viewBox="0 0 960 452" role="img"
+             aria-label="00-bootstrap.yml runs once as root to create the deploy user, then site.yml runs 10-harden, 20-k3s and 99-verify in order; inside 10-harden six roles run in sequence with firewall deliberately before ssh-hardening.">
+          <defs>
+            <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="box-alt" x="16" y="22" width="330" height="58" rx="4"/>
+          <text class="t-mono" x="34" y="46">playbooks/00-bootstrap.yml</text>
+          <text class="t-lbl"  x="34" y="66">as root · once · creates deploy, key, sudo</text>
+          <text class="t-lbl"  x="364" y="46">not imported by site.yml —</text>
+          <text class="t-lbl"  x="364" y="62">it exists to make itself unnecessary</text>
+
+          <line class="edge" x1="181" y1="82" x2="181" y2="112" marker-end="url(#ar2)" color="var(--ink-mid)"/>
+
+          <rect class="box" x="16" y="116" width="928" height="320" rx="4"/>
+          <text class="t-mono" x="34" y="142">site.yml</text>
+          <text class="t-lbl"  x="120" y="142">idempotent · re-runnable · the everyday command</text>
+
+          <!-- 10-harden -->
+          <rect class="box" x="34" y="160" width="304" height="258" rx="4"/>
+          <text class="t-mono" x="50" y="184">playbooks/10-harden.yml</text>
+          <text class="t-lbl"  x="50" y="200">become: true · hosts: all</text>
+
+          <rect class="box-alt" x="50" y="212" width="272" height="26" rx="3"/>
+          <text class="t-mono" x="62" y="229">common</text>
+          <text class="t-lbl"  x="150" y="229">packages, tz, journald, upgrades</text>
+
+          <rect class="box-alt" x="50" y="244" width="272" height="26" rx="3"/>
+          <text class="t-mono" x="62" y="261">users</text>
+          <text class="t-lbl"  x="150" y="261">deploy, authorized_key, sudoers</text>
+
+          <rect class="box-accent" x="50" y="276" width="272" height="26" rx="3"/>
+          <text class="t-mono" x="62" y="293" style="fill:var(--accent)">firewall</text>
+          <text class="t-lbl"  x="150" y="293">nftables, default drop</text>
+
+          <line class="edge-accent" x1="186" y1="304" x2="186" y2="316" marker-end="url(#ar2)" color="var(--accent)"/>
+
+          <rect class="box-accent" x="50" y="320" width="272" height="26" rx="3"/>
+          <text class="t-mono" x="62" y="337" style="fill:var(--accent)">ssh-hardening</text>
+          <text class="t-lbl"  x="150" y="337">no root, no passwords</text>
+
+          <rect class="box-alt" x="50" y="352" width="272" height="26" rx="3"/>
+          <text class="t-mono" x="62" y="369">fail2ban</text>
+          <text class="t-lbl"  x="150" y="369">ban after repeated failures</text>
+
+          <rect class="box-alt" x="50" y="384" width="272" height="26" rx="3"/>
+          <text class="t-mono" x="62" y="401">node-exporter</text>
+          <text class="t-lbl"  x="150" y="401">host metrics, loopback only</text>
+
+          <line class="edge" x1="340" y1="290" x2="366" y2="290" marker-end="url(#ar2)" color="var(--ink-mid)"/>
+
+          <!-- 20-k3s -->
+          <rect class="box" x="370" y="160" width="288" height="258" rx="4"/>
+          <text class="t-mono" x="386" y="184">playbooks/20-k3s.yml</text>
+          <text class="t-lbl"  x="386" y="200">two plays, one per group</text>
+
+          <rect class="box-alt" x="386" y="212" width="256" height="70" rx="3"/>
+          <text class="t-mono" x="398" y="232">hosts: k3s_servers</text>
+          <text class="t-mono" x="398" y="252">role: k3s-server</text>
+          <text class="t-ok"   x="398" y="271">runs · installs the control plane</text>
+
+          <rect class="box-alt" x="386" y="292" width="256" height="112" rx="3"/>
+          <text class="t-mono" x="398" y="312">hosts: k3s_agents</text>
+          <text class="t-mono" x="398" y="332">slurp node-token</text>
+          <text class="t-lbl"  x="398" y="348">delegate_to: the server</text>
+          <text class="t-mono" x="398" y="368">role: k3s-agent</text>
+          <text class="t-skip" x="398" y="392">skipped · group is empty today</text>
+
+          <line class="edge" x1="660" y1="290" x2="686" y2="290" marker-end="url(#ar2)" color="var(--ink-mid)"/>
+
+          <!-- 99-verify -->
+          <rect class="box" x="690" y="160" width="238" height="258" rx="4"/>
+          <text class="t-mono" x="706" y="184">playbooks/99-verify.yml</text>
+          <text class="t-lbl"  x="706" y="200">changes nothing · asserts</text>
+
+          <text class="t-mono" x="706" y="228">sshd -T</text>
+          <text class="t-lbl"  x="706" y="244">root off, passwords off</text>
+          <text class="t-mono" x="706" y="268">ss -ltn · wait_for</text>
+          <text class="t-lbl"  x="706" y="284">something is listening</text>
+          <text class="t-mono" x="706" y="308">nft list ruleset</text>
+          <text class="t-lbl"  x="706" y="324">policy drop, 6443 absent</text>
+          <text class="t-mono" x="706" y="348">kubectl wait --for=Ready</text>
+          <text class="t-lbl"  x="706" y="364">node up, by the right name</text>
+          <text class="t-mono" x="706" y="388">df · service_facts</text>
+          <text class="t-lbl"  x="706" y="404">&gt;20% free, services up</text>
+        </svg>
+      </div>
+      <figcaption>
+        The highlighted edge is the load-bearing one: <code>firewall</code> runs before
+        <code>ssh-hardening</code> so the port sshd is about to listen on is already open.
+        Swap those two on the day the port moves and the next thing you need is a rescue
+        console.
+      </figcaption>
+    </figure>
+
+    <div class="note">
+      <div class="eyebrow">Why the empty agent play exists</div>
+      <p>
+        <code>20-k3s.yml</code> already contains the play that joins worker nodes, against
+        a group with no hosts in it. Ansible reports "no hosts matched" and moves on. It
+        costs ten lines now; written later, under pressure, with a worker already
+        provisioned and waiting, it gets written badly. Adding a second node is now a
+        Terraform entry, an inventory line, and a <code>site.yml</code> run.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>What does the actual work: modules</h2>
+    <p>
+      A task is a name plus a module call. The module is the piece that knows how to
+      look at the machine, decide whether reality already matches, and report
+      <span style="color:var(--ok)">ok</span> or
+      <span style="color:var(--changed)">changed</span>. These are the ones this build
+      leans on.
+    </p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Module</th><th>What it does here</th><th>Where</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>ansible.builtin.apt</code></td>
+            <td class="what">Installs base packages, nftables, fail2ban. Always <code>state: present</code>, never <code>latest</code> — <code>latest</code> makes every run a surprise upgrade and destroys changed=0.</td>
+            <td><code>common</code>, <code>firewall</code>, <code>fail2ban</code></td>
+          </tr>
+          <tr>
+            <td><code>ansible.builtin.template</code></td>
+            <td class="what">Renders a Jinja2 file with the run's variables and writes it. Carries <code>validate:</code> — <code>sshd -t</code>, <code>nft -c</code>, <code>visudo -cf</code> — so a broken config is rejected <em>before</em> it lands, not after the restart takes SSH away.</td>
+            <td>firewall, ssh-hardening, fail2ban, node-exporter, k3s-server</td>
+          </tr>
+          <tr>
+            <td><code>ansible.builtin.copy</code></td>
+            <td class="what">Small static files with no variables in them: the sudoers drop-in, the two unattended-upgrades snippets.</td>
+            <td><code>users</code>, <code>common</code></td>
+          </tr>
+          <tr>
+            <td><code>ansible.builtin.lineinfile</code></td>
+            <td class="what">Edits one setting inside a file Ansible doesn't own end-to-end — the journald size caps.</td>
+            <td><code>common</code></td>
+          </tr>
+          <tr>
+            <td><code>ansible.builtin.file</code></td>
+            <td class="what">Directories, permissions, and deletions — removing the cloud-image sshd drop-ins that would otherwise win over mine.</td>
+            <td>ssh-hardening, k3s-server</td>
+          </tr>
+          <tr>
+            <td><code>ansible.builtin.user</code></td>
+            <td class="what">Creates <code>deploy</code>, and the <code>node_exporter</code> system account with <code>nologin</code> and no home.</td>
+            <td><code>users</code>, <code>node-exporter</code></td>
+          </tr>
+          <tr>
+            <td><code>ansible.posix.authorized_key</code></td>
+            <td class="what">Installs my workstation pubkey, read off the laptop at run time so it never enters the repo. Not <code>exclusive</code> — that would delete a teammate's key mid-incident.</td>
+            <td><code>users</code></td>
+          </tr>
+          <tr>
+            <td><code>ansible.builtin.systemd_service</code></td>
+            <td class="what">Enable + start, and mask ufw so it can't fight nftables over the ruleset.</td>
+            <td>every service-owning role</td>
+          </tr>
+          <tr>
+            <td><code>get_url</code> + <code>unarchive</code></td>
+            <td class="what">Fetches the k3s installer and the node_exporter tarball. Both gated on a version check, because downloading is not idempotent by itself.</td>
+            <td><code>k3s-server</code>, <code>node-exporter</code></td>
+          </tr>
+          <tr>
+            <td><code>ansible.builtin.command</code></td>
+            <td class="what">The escape hatch, used only where no module exists: running the k3s installer, reading <code>k3s --version</code>, <code>sshd -T</code>, <code>nft list ruleset</code>. Every read-only one carries <code>changed_when: false</code>.</td>
+            <td>k3s-server, ssh-hardening, 99-verify</td>
+          </tr>
+          <tr>
+            <td><code>slurp</code> + <code>delegate_to</code></td>
+            <td class="what">Reads the k3s node-token off the control plane while running against a worker — the file is root-only and exists on one host, not the other.</td>
+            <td><code>20-k3s.yml</code></td>
+          </tr>
+          <tr>
+            <td><code>set_fact</code> / <code>stat</code> / <code>assert</code></td>
+            <td class="what">Not state, but reasoning: decide whether an install is needed, and fail loudly with a message when a precondition doesn't hold.</td>
+            <td>k3s-server, ssh-hardening, 99-verify</td>
+          </tr>
+          <tr>
+            <td><code>service_facts</code> / <code>getent</code></td>
+            <td class="what">Read the machine into variables so assertions can be written against it instead of against a grep.</td>
+            <td><code>99-verify.yml</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Two collections beyond core, pinned in <code>requirements.yml</code>:
+      <code>ansible.posix</code> for <code>authorized_key</code> and <code>sysctl</code>,
+      and <code>community.general</code> for the timezone module and the k3s-era helpers.
+    </p>
+  </section>
+
+  <section>
+    <h2>The one concept worth keeping: changed=0</h2>
+    <p>
+      k3s installs with a single <code>curl | sh</code>. The reason it is a role instead
+      is that the installer is <strong>not idempotent</strong>: it always downloads,
+      always rewrites the systemd unit, always reports success. Run it from a
+      <code>shell:</code> task and every run says "changed", forever, and you lose the
+      only signal that tells you whether the machine drifted.
+    </p>
+    <p>
+      So the role decides for itself, first, and gates everything on that decision:
+    </p>
+
+    <figure>
+      <div class="canvas">
+        <svg viewBox="0 0 900 260" role="img"
+             aria-label="The k3s role stats the binary, reads k3s --version, and compares it to the pinned version; if it matches the installer is skipped and the run reports ok, otherwise the installer downloads and runs and the run reports changed.">
+          <defs>
+            <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="box" x="10" y="96" width="150" height="56" rx="4"/>
+          <text class="t-mono" x="24" y="120">stat</text>
+          <text class="t-lbl"  x="24" y="138">/usr/local/bin/k3s</text>
+
+          <line class="edge" x1="162" y1="124" x2="196" y2="124" marker-end="url(#ar3)" color="var(--ink-mid)"/>
+
+          <rect class="box" x="200" y="96" width="160" height="56" rx="4"/>
+          <text class="t-mono" x="214" y="120">k3s --version</text>
+          <text class="t-lbl"  x="214" y="138">changed_when: false</text>
+
+          <line class="edge" x1="362" y1="124" x2="396" y2="124" marker-end="url(#ar3)" color="var(--ink-mid)"/>
+
+          <rect class="box-accent" x="400" y="88" width="196" height="72" rx="4"/>
+          <text class="t-mono" x="414" y="112" style="fill:var(--accent)">k3s_install_required</text>
+          <text class="t-lbl"  x="414" y="130">does it already say</text>
+          <text class="t-lbl"  x="414" y="146">v1.34.10+k3s1 ?</text>
+
+          <!-- yes -> skip -->
+          <path class="edge" d="M 598 110 L 640 110 L 640 52 L 686 52" marker-end="url(#ar3)" color="var(--ink-mid)"/>
+          <text class="t-lbl" x="606" y="102">yes</text>
+          <rect class="box" x="690" y="26" width="200" height="56" rx="4"/>
+          <text class="t-mono" x="704" y="50">installer skipped</text>
+          <text class="t-ok"   x="704" y="70">second run: changed=0</text>
+
+          <!-- no -> install -->
+          <path class="edge" d="M 598 140 L 640 140 L 640 200 L 686 200" marker-end="url(#ar3)" color="var(--ink-mid)"/>
+          <text class="t-lbl" x="606" y="158">no</text>
+          <rect class="box" x="690" y="172" width="200" height="72" rx="4"/>
+          <text class="t-mono" x="704" y="196">get_url + run installer</text>
+          <text class="t-lbl"  x="704" y="214">INSTALL_K3S_VERSION</text>
+          <text class="t-changed" x="704" y="234">first run: changed</text>
+        </svg>
+      </div>
+      <figcaption>
+        The version is pinned in <code>roles/k3s-server/defaults/main.yml</code>. Unpinned,
+        <code>get.k3s.io</code> always fetches latest — meaning a <code>site.yml</code>
+        run six months from now, for an unrelated reason, silently upgrades the control
+        plane at 23:00.
+      </figcaption>
+    </figure>
+
+    <p>
+      The same shape appears in <code>node-exporter</code>: read the installed version,
+      only <code>unarchive</code> when it doesn't match. Any task built on
+      <code>command</code> or <code>shell</code> has to be given this by hand — that is
+      the tax you pay for stepping outside a module, and the reason to step outside one
+      as rarely as possible.
+    </p>
+  </section>
+
+  <section>
+    <h2>Handlers: restart only when something moved</h2>
+    <p>
+      A template that rewrites <code>/etc/rancher/k3s/config.yaml</code> hasn't done
+      anything until k3s reads it. But restarting k3s on every run would mean a control
+      plane blip every single time, for nothing. So the task <code>notify</code>s a
+      handler, and the handler fires only if the file genuinely changed.
+    </p>
+
+    <figure>
+      <div class="canvas">
+        <svg viewBox="0 0 900 190" role="img"
+             aria-label="If the k3s config template changes it notifies the Restart k3s handler, which is queued and flushed before the readiness check; if the file is unchanged nothing is queued and no restart happens.">
+          <defs>
+            <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5"
+                    markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+
+          <rect class="box" x="10" y="60" width="196" height="66" rx="4"/>
+          <text class="t-mono" x="24" y="86">template: config.yaml.j2</text>
+          <text class="t-lbl"  x="24" y="106">→ /etc/rancher/k3s/</text>
+
+          <path class="edge-accent" d="M 208 80 L 262 80" marker-end="url(#ar4)" color="var(--accent)"/>
+          <text class="t-acc" x="212" y="70">changed</text>
+
+          <rect class="box-accent" x="266" y="52" width="188" height="56" rx="4"/>
+          <text class="t-mono" x="280" y="76" style="fill:var(--accent)">notify: Restart k3s</text>
+          <text class="t-lbl"  x="280" y="94">queued, not run yet</text>
+
+          <path class="edge-dash" d="M 208 116 L 262 148 L 700 148" marker-end="url(#ar4)" color="var(--ink-mute)"/>
+          <text class="t-lbl" x="330" y="164">unchanged → nothing is queued, nothing restarts</text>
+
+          <path class="edge" d="M 456 80 L 508 80" marker-end="url(#ar4)" color="var(--ink-mid)"/>
+
+          <rect class="box" x="512" y="46" width="180" height="68" rx="4"/>
+          <text class="t-mono" x="526" y="70">meta: flush_handlers</text>
+          <text class="t-lbl"  x="526" y="88">forced early — before</text>
+          <text class="t-lbl"  x="526" y="104">the readiness check</text>
+
+          <path class="edge" d="M 694 80 L 744 80" marker-end="url(#ar4)" color="var(--ink-mid)"/>
+
+          <rect class="box" x="748" y="52" width="142" height="56" rx="4"/>
+          <text class="t-mono" x="762" y="76">systemctl</text>
+          <text class="t-mono" x="762" y="94">restart k3s</text>
+        </svg>
+      </div>
+      <figcaption>
+        Handlers normally run at the very end of a play. Here they're flushed early on
+        purpose: checking that the node is Ready is meaningless against an API server
+        that is about to be restarted by a pending config change.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Configuration as a file, not as a flag</h2>
+    <p>
+      The k3s installer accepts its flags through <code>INSTALL_K3S_EXEC</code>, which
+      bakes them into the systemd unit. This build deliberately passes only
+      <code>server</code> there and puts every real flag in
+      <code>/etc/rancher/k3s/config.yaml</code>, rendered from
+      <code>config.yaml.j2</code>:
+    </p>
+    <ul class="plain">
+      <li><code>node-name</code> — so the node registers under the name the inventory uses, not the provider's hostname.</li>
+      <li><code>write-kubeconfig-mode: 0644</code> — so <code>deploy</code> can run read-only <code>k3s kubectl get/describe/logs</code> during triage without sudo. A single-operator trade-off.</li>
+      <li><code>disable: [traefik, servicelb]</code> — ingress-nginx needs ports 80 and 443. Two ingress controllers racing for the same host ports is a bad evening with very misleading symptoms.</li>
+      <li><code>tls-san</code> — the hostnames and IP baked into the API server certificate.</li>
+    </ul>
+    <p>
+      k3s re-reads that file on every start, so changing a flag is a template diff and a
+      handler restart. Bake it into the unit instead and "add a hostname" becomes a
+      reinstall.
+    </p>
+    <div class="note">
+      <div class="eyebrow">The caveat to know before you need it</div>
+      <p>
+        Adding a <code>tls-san</code> does <em>not</em> reissue an existing certificate —
+        k3s only regenerates one that's missing. Delete
+        <code>serving-kube-apiserver.{crt,key}</code> and restart. The x509 error you get
+        without doing that helpfully names the SANs it <em>does</em> have, which is the
+        fastest confirmation you've hit exactly this.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>If someone asks me to explain it</h2>
+    <div class="script">
+      <p>
+        Five sentences, in order, that cover the whole layer:
+      </p>
+      <ol>
+        <li>
+          Terraform owns things that have an API before a cluster exists; Ansible owns
+          everything <em>inside</em> the operating system; after that, Argo CD owns
+          everything with a Kubernetes API — and no component belongs to two of them.
+        </li>
+        <li>
+          Ansible is agentless: my laptop is the control node, it reaches the host over
+          plain SSH as an unprivileged <code>deploy</code> user, and the description of
+          the machine lives in Git rather than on the machine.
+        </li>
+        <li>
+          The work is organised as roles — <code>common</code>, <code>users</code>,
+          <code>firewall</code>, <code>ssh-hardening</code>, <code>fail2ban</code>,
+          <code>node-exporter</code>, <code>k3s-server</code> — composed by playbooks
+          whose order is load-bearing: the firewall opens the SSH port before sshd is
+          moved onto it.
+        </li>
+        <li>
+          Idempotency is the acceptance criterion, not a nice-to-have: the k3s installer
+          isn't idempotent, so the role version-checks first and skips it, and a second
+          <code>site.yml</code> run reports <code>changed=0</code>.
+        </li>
+        <li>
+          And the last playbook changes nothing at all — it asserts that root login is
+          off, that the firewall defaults to drop and doesn't expose 6443, that the node
+          is Ready under the expected name, and that the disk still has 20% free.
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>
+    <span>RevealRoll staging · stages 02–03</span>
+    <span>source: ansible/ in this repo</span>
+    <span>k3s v1.34.10+k3s1</span>
+  </footer>
+
+</div>

@@ -1,0 +1,7 @@
+apiVersion: v2
+name: cluster-issuers
+description: >-
+  The two Let's Encrypt ClusterIssuers, packaged as a chart purely so Terraform can create
+  them in the same apply that installs cert-manager. See the comment in issuers.tf.
+type: application
+version: 1.0.0

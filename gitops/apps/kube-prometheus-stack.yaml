@@ -1,0 +1,52 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    # Wave -1: this chart owns the CRDs (ServiceMonitor, PrometheusRule, …) that other
+    # Applications' resources are instances of. Those must exist before anything selects
+    # them, and waves are how Argo expresses "this first".
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  # Two sources, which is how you keep an upstream chart and your own values in one
+  # Application. The second source contributes no manifests -- `ref: values` just makes
+  # this repo's files addressable as $values from the first source's valueFiles.
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      # Pinned, never a range. An unpinned chart means the cluster can change because
+      # someone else published, which is the opposite of what Git-as-truth is for.
+      targetRevision: 88.3.0
+      helm:
+        valueFiles:
+          - $values/gitops/apps/_values/kube-prometheus-stack.yaml
+    - repoURL: https://github.com/tutac/revealroll-platform.git
+      targetRevision: main
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The Prometheus Operator CRDs are far larger than the 262 kB annotation that
+      # client-side apply stuffs into last-applied-configuration. Without this the first
+      # sync fails with "metadata.annotations: Too long".
+      - ServerSideApply=true
+    retry:
+      # The first sync of a chart that installs CRDs *and* resources using them can fail
+      # once on ordering and succeed on retry. Expected, not a problem to debug.
+      limit: 5
+      backoff: { duration: 20s, factor: 2, maxDuration: 5m }
+
+  revisionHistoryLimit: 10

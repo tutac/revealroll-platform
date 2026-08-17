@@ -89,22 +89,29 @@
       become_user: "{{ deploy_user }}"
       changed_when: false
 
-    - name: Assert node-exporter listens on loopback only
+    - name: Read what node-exporter is bound to
       ansible.builtin.shell:
         cmd: set -o pipefail && ss -ltnp | grep ':9100' || true
         executable: /bin/bash
       register: verify_node_exporter
       changed_when: false
 
-    - name: Assert 9100 is not bound to a public address
+    - name: Assert 9100 is bound to the node address and not to every interface
+      # Since Stage 08 the exporter binds the node's own IPv4 so that Prometheus PODS can
+      # reach it -- their 127.0.0.1 is their own, not the host's. A wildcard bind is still
+      # refused: it would also expose 9100 on any interface added later.
+      #
+      # This asserts the bind. What asserts the EXPOSURE is the external port scan further
+      # down, which must still show 9100 filtered from the internet.
       ansible.builtin.assert:
         that:
-          - "'127.0.0.1:9100' in verify_node_exporter.stdout"
+          - "ansible_default_ipv4.address ~ ':9100' in verify_node_exporter.stdout"
           - "'0.0.0.0:9100' not in verify_node_exporter.stdout"
+          - "'*:9100' not in verify_node_exporter.stdout"
         fail_msg: >-
-          node-exporter is not bound to loopback. Host metrics are reachable from
-          outside the machine.
-        success_msg: "node-exporter: 127.0.0.1:9100 only."
+          node-exporter is not bound to {{ ansible_default_ipv4.address }}:9100, or it is
+          bound to every interface. Got: {{ verify_node_exporter.stdout | default('nothing') }}
+        success_msg: "node-exporter: {{ ansible_default_ipv4.address }}:9100, firewall-protected."
 
     - name: Collect service state
       ansible.builtin.service_facts:

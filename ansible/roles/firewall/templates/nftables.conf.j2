@@ -20,8 +20,10 @@ table inet filter {
     tcp dport { {{ firewall_public_tcp_ports | join(', ') }} } accept comment "ingress-nginx hostPort"
 
     # Cluster-internal traffic. 6443 (kube-apiserver) and 9100 (node-exporter) are
-    # deliberately absent: the API is reached over an SSH tunnel, and Prometheus scrapes
-    # node-exporter on 127.0.0.1 from inside the cluster.
+    # deliberately absent from the public accepts: the API is reached over an SSH tunnel,
+    # and node-exporter is scraped by Prometheus pods, whose packets arrive HERE -- on a
+    # CNI interface -- not on the public one. That is the whole reason 9100 can be bound
+    # to the node's address and still be unreachable from the internet.
     iifname { {{ cni }} } accept comment "k3s CNI"
   }
 

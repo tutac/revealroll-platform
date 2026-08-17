@@ -1,0 +1,145 @@
+# Values for kube-prometheus-stack 88.3.0 (Argo CD Application: gitops/apps/kube-prometheus-stack.yaml).
+#
+# Budget on a 4 vCPU / 8 GB node: ~1.4 Gi requested by this chart. See the resource table
+# in docs-course/stages/STAGE-08-observability.md before raising anything here.
+
+# ── k3s does not run these as scrapeable components ────────────────────────────
+# Left enabled they produce four permanently red targets. A red target you have taught
+# yourself to ignore is worse than no monitoring, because it hides the real one.
+kubeEtcd: { enabled: false }
+kubeScheduler: { enabled: false }
+kubeControllerManager: { enabled: false }
+kubeProxy: { enabled: false }
+
+# Ansible runs node-exporter as a systemd unit (roles/node-exporter) so that host metrics
+# -- disk, memory, load -- survive the cluster itself being broken, which is exactly when
+# you need them. Running the chart's DaemonSet too would double every host series.
+nodeExporter: { enabled: false }
+
+# The same reasoning applied to the alerting rules: the chart ships rule groups for the
+# control-plane components k3s does not expose. They would fire immediately and forever.
+defaultRules:
+  create: true
+  rules:
+    etcd: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeControllerManager: false
+    kubeProxy: false
+    # k3s bundles its own; the chart's version alerts on a component layout we do not have.
+    kubernetesSystem: false
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    # Time-based retention alone does not protect the disk: a cardinality explosion fills
+    # 10 Gi in a day and 7d never arrives. This is the belt to that braces.
+    retentionSize: 8GB
+    scrapeInterval: 30s
+
+    # Without these two, Prometheus only picks up ServiceMonitors and PrometheusRules
+    # carrying this release's label -- so your own app's ServiceMonitor is silently
+    # ignored, which is the single most common "why is my target missing" cause.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+
+    resources:
+      requests: { cpu: 200m, memory: 1Gi }
+      limits: { memory: 2Gi }
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: [ReadWriteOnce]
+          # k3s local-path is the only StorageClass here. It is node-local: the PVC does
+          # not survive the node, which is fine for metrics and is why Stage 10 backs up
+          # etcd rather than Prometheus.
+          resources: { requests: { storage: 10Gi } }
+
+    additionalScrapeConfigs:
+      # The host node-exporter, scraped at the NODE's address -- not 127.0.0.1, which
+      # inside a Prometheus pod means the pod itself. Ansible binds it there for exactly
+      # this reason; the firewall keeps 9100 off the internet.
+      #
+      # The job MUST be called node-exporter. The chart's own rules and dashboards match
+      # on job="node-exporter" in 87 places; call it anything else and every node panel
+      # renders empty while looking perfectly installed.
+      - job_name: node-exporter
+        static_configs:
+          - targets: ["169.58.164.170:9100"]
+            labels:
+              instance: staging-1
+
+alertmanager:
+  alertmanagerSpec:
+    replicas: 1
+    resources:
+      requests: { cpu: 10m, memory: 64Mi }
+      limits: { memory: 128Mi }
+  config:
+    route:
+      group_by: [alertname, namespace]
+      group_wait: 30s
+      group_interval: 5m
+      # Long on purpose. A repeat interval short enough to be annoying is how you train
+      # yourself to swipe alerts away without reading them.
+      repeat_interval: 4h
+      receiver: "null"
+      routes:
+        # Watchdog fires constantly by design (dead man's switch). It must never reach a
+        # human channel -- it goes to a service that alerts when it STOPS arriving.
+        - matchers: [alertname = "Watchdog"]
+          receiver: "null"
+          repeat_interval: 5m
+    receivers:
+      # TODO(08.8): replace with the real channel + a sealed credential. Deliberately a
+      # black hole until then: alerts that fire into nowhere are honest, alerts routed to
+      # a channel nobody has set up are a lie you find out about during an incident.
+      - name: "null"
+
+grafana:
+  # Password comes from a SealedSecret (scripts/seal-grafana-admin.sh), never from values.
+  adminPassword: ""
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+
+  # Nothing to persist: dashboards are provisioned from labelled ConfigMaps, so a Grafana
+  # pod is disposable. If deleting the pod loses a dashboard, that dashboard was clicked,
+  # not committed -- which is the test in 08.6.
+  persistence: { enabled: false }
+
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts: [grafana.stg.revealroll.com]
+    tls:
+      - secretName: grafana-tls
+        hosts: [grafana.stg.revealroll.com]
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      searchNamespace: ALL
+
+  # additionalDataSources for Loki is added in 08.4, once Loki actually exists. A
+  # datasource pointing at a Service that is not there is a red X on every dashboard.
+
+kube-state-metrics:
+  resources:
+    requests: { cpu: 20m, memory: 64Mi }
+    limits: { memory: 192Mi }
+
+prometheus-node-exporter:
+  # Belt and braces with nodeExporter.enabled above: this is the subchart's own switch.
+  enabled: false

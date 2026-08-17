@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: loki
+      # Loki's config schema changes meaningfully between chart majors. The values file
+      # next to this was written against exactly this version -- moving it is a values
+      # review, not a version bump.
+      targetRevision: 7.3.0
+      helm:
+        valueFiles:
+          - $values/gitops/apps/_values/loki.yaml
+    - repoURL: https://github.com/tutac/revealroll-platform.git
+      targetRevision: main
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    # Same namespace as Prometheus and Grafana: one place to look, and the Grafana
+    # datasource can use a short Service name.
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+  revisionHistoryLimit: 10

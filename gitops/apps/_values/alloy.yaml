@@ -1,0 +1,118 @@
+# Values for grafana/alloy 1.11.1 — the log shipper.
+#
+# Alloy runs as a DaemonSet (one per node) and forwards container logs to Loki. Logs are
+# read through the Kubernetes API rather than by mounting /var/log from the host, so the
+# pod needs no hostPath and no privileged access.
+
+controller:
+  type: daemonset
+
+# ── RBAC: the chart's default role is far wider than this pipeline needs ───────
+# It grants get/list/watch on `secrets` and `configmaps` across every namespace, plus the
+# Prometheus Operator CRDs -- because the same chart supports Alloy scraping metrics and
+# reading Operator config. This deployment only tails container logs. A log shipper that
+# can read every Secret in the cluster is a much larger blast radius than a log shipper.
+rbac:
+  create: false
+
+serviceAccount:
+  create: true
+  name: alloy
+
+extraObjects:
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: alloy-logs-reader
+    rules:
+      # Exactly what discovery.kubernetes(role: "pod") and loki.source.kubernetes need:
+      # find the pods, then read their logs. Nothing else.
+      - apiGroups: [""]
+        resources: [pods, pods/log, namespaces, nodes]
+        verbs: [get, list, watch]
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: alloy-logs-reader
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: alloy-logs-reader
+    subjects:
+      - kind: ServiceAccount
+        name: alloy
+        namespace: monitoring
+
+alloy:
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+  # Single node, so there is nothing to cluster with.
+  clustering:
+    enabled: false
+
+  configMap:
+    create: true
+    content: |-
+      logging {
+        level  = "info"
+        format = "logfmt"
+      }
+
+      // Every pod in the cluster, discovered from the API.
+      discovery.kubernetes "pods" {
+        role = "pod"
+      }
+
+      // Which Kubernetes metadata becomes a Loki LABEL.
+      //
+      // Loki indexes labels, not content, so this list is the whole cost model: each
+      // distinct combination of values is a stream. namespace/pod/container/app are
+      // bounded by how much you deploy. Anything unbounded -- a request id, a trace id,
+      // the pod's IP, a per-release hash -- would create a stream per value and destroy
+      // Loki exactly the way high-cardinality labels destroy Prometheus.
+      //
+      // Search on the content instead: {namespace="revealroll"} |= "trace_id=abc".
+      discovery.relabel "pods" {
+        targets = discovery.kubernetes.pods.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          target_label  = "app"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_node_name"]
+          target_label  = "node"
+        }
+      }
+
+      loki.source.kubernetes "pods" {
+        targets    = discovery.relabel.pods.output
+        forward_to = [loki.write.default.receiver]
+      }
+
+      loki.write "default" {
+        endpoint {
+          // The SingleBinary Service. The nginx gateway is disabled in the Loki values,
+          // so this talks to Loki directly on its http-metrics port.
+          url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }
+
+# Alloy's own metrics -- so "the log pipeline stopped" is a visible condition rather than
+# something you discover when a query returns nothing.
+serviceMonitor:
+  enabled: true

@@ -154,8 +154,16 @@ grafana:
       label: grafana_dashboard
       searchNamespace: ALL
 
-  # additionalDataSources for Loki is added in 08.4, once Loki actually exists. A
-  # datasource pointing at a Service that is not there is a red X on every dashboard.
+  # Provisioned, not clicked. A datasource added through the UI lives only in Grafana's
+  # database, which is disabled above -- it would vanish with the pod.
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      access: proxy
+      url: http://loki.monitoring.svc.cluster.local:3100
+      jsonData:
+        # Loki is single-tenant here (auth_enabled: false), so no X-Scope-OrgID.
+        maxLines: 1000
 
 kube-state-metrics:
   resources:

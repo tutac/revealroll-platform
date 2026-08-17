@@ -1,0 +1,97 @@
+# Values for grafana/loki 7.3.0 (app v3.6.x), SingleBinary mode.
+#
+# Loki's chart defaults target a horizontally-scaled production install: 3+3+3 replicas
+# and an 8 GB memcached. On one 8 GB node that is not a tuning question, it is an outage.
+# Everything below is either "make it one process" or "make it not cache in RAM".
+
+deploymentMode: SingleBinary
+
+loki:
+  # No multi-tenancy. With auth_enabled: true every query needs an X-Scope-OrgID header
+  # and Grafana silently returns nothing until you set one.
+  auth_enabled: false
+
+  commonConfig:
+    # Default is 3. With a single instance, 3 means every write fails to reach quorum.
+    replication_factor: 1
+
+  storage:
+    type: filesystem
+
+  # Required, and version-specific: the chart ships an empty schemaConfig and Loki will
+  # not start without one. v13 + tsdb is the current pairing for 3.x -- older blog posts
+  # say v11/boltdb-shipper, which fails on this version.
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+  limits_config:
+    # 7 days. Long enough to investigate last week's incident, short enough that one
+    # chatty container cannot fill the disk before you notice.
+    retention_period: 168h
+    volume_enabled: true
+    reject_old_samples: true
+    reject_old_samples_max_age: 168h
+
+  compactor:
+    # retention_period WITHOUT this does nothing at all -- no error, no warning, logs
+    # simply accumulate until the PVC is full. It is the single most common way people
+    # discover Loki retention was never working.
+    retention_enabled: true
+    delete_request_store: filesystem
+    working_directory: /var/loki/compactor
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+
+# The scaled-out targets. Left at their defaults these deploy nine more pods that
+# SingleBinary mode does not use.
+write: { replicas: 0 }
+read: { replicas: 0 }
+backend: { replicas: 0 }
+
+# Every other component of the microservices topology, explicitly off.
+ingester: { replicas: 0 }
+distributor: { replicas: 0 }
+querier: { replicas: 0 }
+queryFrontend: { replicas: 0 }
+queryScheduler: { replicas: 0 }
+indexGateway: { replicas: 0 }
+compactor: { replicas: 0 }
+bloomGateway: { replicas: 0 }
+bloomPlanner: { replicas: 0 }
+bloomBuilder: { replicas: 0 }
+patternIngester: { replicas: 0 }
+ruler: { replicas: 0 }
+
+# memcached, defaulting to 8192 MB and 1024 MB respectively. A cache larger than the
+# node's entire memory budget, in front of 7 days of one app's logs.
+chunksCache: { enabled: false }
+resultsCache: { enabled: false }
+
+# The nginx gateway only earns its place in front of separate read/write paths. With one
+# process behind it, it is a second hop and a second thing to debug.
+gateway: { enabled: false }
+
+# A synthetic log generator used to verify Loki end to end. Useful at scale; here it is
+# a pod continuously writing logs into the disk budget it is meant to be checking.
+lokiCanary: { enabled: false }
+test: { enabled: false }
+
+# Let Prometheus scrape Loki itself -- "are the logs arriving?" is a question you want
+# answered by a metric, not by opening Grafana and squinting.
+monitoring:
+  selfMonitoring: { enabled: false, grafanaAgent: { installOperator: false } }
+  serviceMonitor: { enabled: true }

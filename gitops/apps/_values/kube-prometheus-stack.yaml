@@ -100,6 +100,11 @@ alertmanager:
     resources:
       requests: { cpu: 10m, memory: 64Mi }
       limits: { memory: 128Mi }
+    # TODO(08.8): uncomment together with the ntfy receiver below, AFTER running
+    # scripts/seal-ntfy.sh. Alertmanager mounts this secret at startup, so enabling it
+    # before the SealedSecret exists leaves the pod stuck in CreateContainerConfigError.
+    # secrets:
+    #   - alertmanager-ntfy
   config:
     route:
       group_by: [alertname, namespace]
@@ -108,18 +113,31 @@ alertmanager:
       # Long on purpose. A repeat interval short enough to be annoying is how you train
       # yourself to swipe alerts away without reading them.
       repeat_interval: 4h
+      # TODO(08.8): -> ntfy. Until then every alert lands in a black hole. That is a
+      # deliberate, visible gap: alerts routed to a channel nobody has subscribed to are
+      # worse, because you only discover it during the incident it was meant to catch.
+      # Fire-and-receive (08.9) is blocked on this, and so is trusting any of it.
       receiver: "null"
       routes:
         # Watchdog fires constantly by design (dead man's switch). It must never reach a
-        # human channel -- it goes to a service that alerts when it STOPS arriving.
+        # human channel -- 08.10 points this at a service that alerts when it STOPS.
         - matchers: [alertname = "Watchdog"]
           receiver: "null"
           repeat_interval: 5m
+        # Critical repeats more often than the 4h default, but not so often that it
+        # becomes background noise.
+        - matchers: [severity = "critical"]
+          receiver: "null" # TODO(08.8): -> ntfy
+          repeat_interval: 1h
     receivers:
-      # TODO(08.8): replace with the real channel + a sealed credential. Deliberately a
-      # black hole until then: alerts that fire into nowhere are honest, alerts routed to
-      # a channel nobody has set up are a lie you find out about during an incident.
       - name: "null"
+      # TODO(08.8): enable with scripts/seal-ntfy.sh + the secrets mount above.
+      # Alertmanager posts its own JSON schema and cannot template a webhook body, so
+      # the phone notification arrives as a raw alert payload. Legible enough to act on.
+      # - name: ntfy
+      #   webhook_configs:
+      #     - url_file: /etc/alertmanager/secrets/alertmanager-ntfy/url
+      #       send_resolved: true
 
 grafana:
   # Password comes from a SealedSecret (scripts/seal-grafana-admin.sh), never from values.

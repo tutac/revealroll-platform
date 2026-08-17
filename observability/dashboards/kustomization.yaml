@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+
+# Grafana's sidecar loads any ConfigMap labelled grafana_dashboard: "1", from any
+# namespace. So "provisioning a dashboard" means "producing a labelled ConfigMap", and
+# kustomize's configMapGenerator does that from the raw .json file -- which stays a real
+# file you can edit, diff and paste back into Grafana, rather than a string embedded in
+# a manifest.
+generatorOptions:
+  # Without this, kustomize appends a content hash to the name and every edit creates a
+  # NEW ConfigMap while Argo prunes the old one. It works, but the churn makes the
+  # dashboard briefly disappear on each change.
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+
+configMapGenerator:
+  - name: grafana-dashboard-revealroll
+    files:
+      - revealroll-golden-signals.json

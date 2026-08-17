@@ -1,0 +1,28 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ingress-nginx
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  # ingress-nginx is Terraform's (bootstrap layer), but a ServiceMonitor is an ordinary
+  # Kubernetes object, so it belongs to Argo CD. The chart already exposes the metrics
+  # port; nothing was scraping it.
+  #
+  # This is the closest thing to application RED metrics available without instrumenting
+  # the app: every request to every host passes through here, so request rate, status
+  # codes and latency are all measurable at the edge -- labelled by ingress and host,
+  # which is exactly the granularity a golden-signals dashboard needs.
+  namespaceSelector:
+    matchNames: [ingress-nginx]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ingress-nginx
+      app.kubernetes.io/component: controller
+  endpoints:
+    # By NAME, not number. A ServiceMonitor referencing a port number silently matches
+    # nothing when the chart renames or reorders ports.
+    - port: metrics
+      interval: 30s
+      path: /metrics

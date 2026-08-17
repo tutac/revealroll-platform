@@ -191,7 +191,7 @@ undecryptable. It is backed up in the password manager. Re-back-up after any con
 | Get a kubeconfig on your laptop | `scripts/fetch-kubeconfig.sh` | ✅ 03 |
 | Reach the kube-apiserver at all | `make tunnel` — 6443 is closed on purpose (decision 011) | ✅ 03 |
 | Seal a whole `.env` into one SealedSecret | `scripts/seal-env.sh` | ⏳ 05 |
-| Is the site up and is the cert healthy | `scripts/smoke.sh` | ⏳ 06 |
+| Is the site up and is the cert healthy | `scripts/smoke.sh` — no cluster creds; `CERT_MIN_DAYS` to tighten | ✅ 07 |
 | Back up etcd + the sealing key to R2 | `scripts/backup-etcd.sh` | ⏳ 10 |
 | Common command shortcuts | `Makefile` | ✅ |
 | **What to do when an alert fires** | `docs/runbooks/*.md` | ⏳ 10 |

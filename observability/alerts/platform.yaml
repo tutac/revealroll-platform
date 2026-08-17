@@ -1,0 +1,152 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: platform
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    # ── What a user experiences ──────────────────────────────────────────────
+    # First on purpose. These fire on symptoms visible from outside the cluster, which is
+    # the only category that is always worth waking up for. On 2026-08-17 the site was
+    # unreachable for 20 minutes while every internal signal read healthy; this group is
+    # what would have caught it.
+    - name: blackbox
+      rules:
+        - alert: SiteDown
+          expr: probe_success{job="blackbox-http"} == 0
+          for: 2m
+          labels: { severity: critical }
+          annotations:
+            summary: "{{ $labels.instance }} is not answering"
+            description: >-
+              An HTTP probe from inside the cluster to the public URL has failed for 2
+              minutes. DNS, the firewall, ingress-nginx, TLS or the app itself.
+            runbook_url: "https://github.com/tutac/revealroll-platform/blob/main/docs/runbooks/app-down.md"
+
+        - alert: SiteCertExpiringSoon
+          # cert-manager renews at 30 days. If this fires, renewal is failing silently --
+          # which is the normal way certificates expire: unattended, on a weekend.
+          expr: (probe_ssl_earliest_cert_expiry{job="blackbox-http"} - time()) / 86400 < 21
+          for: 1h
+          labels: { severity: warning }
+          annotations:
+            summary: "TLS certificate for {{ $labels.instance }} expires in {{ $value | printf \"%.0f\" }} days"
+            runbook_url: "https://github.com/tutac/revealroll-platform/blob/main/docs/runbooks/cert-not-issuing.md"
+
+        - alert: SiteSlow
+          expr: probe_duration_seconds{job="blackbox-http"} > 5
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.instance }} is taking over 5s to respond"
+            runbook_url: "https://github.com/tutac/revealroll-platform/blob/main/docs/runbooks/app-down.md"
+
+    # ── The single node ──────────────────────────────────────────────────────
+    - name: node
+      rules:
+        - alert: NodeDiskFillingUp
+          # The #1 single-node killer: a full disk presents as ten unrelated Kubernetes
+          # failures at once, none of which mention the disk.
+          expr: |
+            node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}
+              / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"} < 0.15
+          for: 10m
+          labels: { severity: critical }
+          annotations:
+            summary: "Less than 15% disk free on {{ $labels.instance }}"
+            runbook_url: "https://github.com/tutac/revealroll-platform/blob/main/docs/runbooks/disk-pressure.md"
+
+        - alert: NodeDiskWillFillIn24h
+          # The useful one. Fires while it is still a chore rather than an incident.
+          expr: predict_linear(node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}[6h], 24*3600) < 0
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "Disk on {{ $labels.instance }} is projected to fill within 24h"
+            runbook_url: "https://github.com/tutac/revealroll-platform/blob/main/docs/runbooks/disk-pressure.md"
+
+        - alert: NodeMemoryPressure
+          expr: |
+            node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.10
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "Under 10% memory available on {{ $labels.instance }}"
+            description: "Next step is the kernel OOM killer choosing a victim for you."
+            runbook_url: "https://github.com/tutac/revealroll-platform/blob/main/docs/runbooks/node-reboot.md"
+
+        - alert: KubeNodeNotReady
+          expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+          for: 5m
+          labels: { severity: critical }
+          annotations:
+            summary: "Node {{ $labels.node }} has not been Ready for 5 minutes"
+            runbook_url: "https://github.com/tutac/revealroll-platform/blob/main/docs/runbooks/node-reboot.md"
+
+    # ── Workloads ────────────────────────────────────────────────────────────
+    - name: workloads
+      rules:
+        - alert: PodCrashLooping
+          expr: increase(kube_pod_container_status_restarts_total[15m]) > 3
+          for: 5m
+          labels: { severity: critical }
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} is crash-looping"
+            runbook_url: "https://github.com/tutac/revealroll-platform/blob/main/docs/runbooks/app-down.md"
+
+        - alert: PodNotReady
+          expr: |
+            sum by (namespace, pod) (
+              kube_pod_status_phase{phase=~"Pending|Unknown"}
+            ) > 0
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} has been non-Ready for 15m"
+            runbook_url: "https://github.com/tutac/revealroll-platform/blob/main/docs/runbooks/app-down.md"
+
+        - alert: DeploymentReplicasMismatch
+          # Catches the case the blackbox probe cannot: the site answers because one
+          # replica is up, while the other has been unschedulable for half an hour.
+          expr: |
+            kube_deployment_spec_replicas{namespace="revealroll"}
+              != kube_deployment_status_replicas_available{namespace="revealroll"}
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "{{ $labels.deployment }} has fewer available replicas than desired"
+            runbook_url: "https://github.com/tutac/revealroll-platform/blob/main/docs/runbooks/app-down.md"
+
+    # ── Is the monitoring itself alive? ──────────────────────────────────────
+    - name: meta
+      rules:
+        - alert: PrometheusTargetDown
+          expr: up == 0
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "Target {{ $labels.job }} ({{ $labels.instance }}) has been down 10m"
+            description: "Something is no longer being monitored. You are blind on it, not fine."
+            runbook_url: "https://github.com/tutac/revealroll-platform/blob/main/docs/runbooks/app-down.md"
+
+        - alert: LogsNotArriving
+          # Loki accepting nothing for 30 minutes means the pipeline is broken. Without
+          # this you find out during an incident, when the logs you need are missing.
+          expr: sum(rate(loki_distributor_lines_received_total[15m])) == 0
+          for: 30m
+          labels: { severity: warning }
+          annotations:
+            summary: "Loki has received no log lines for 30 minutes"
+            runbook_url: "https://github.com/tutac/revealroll-platform/blob/main/docs/runbooks/app-down.md"
+
+        - alert: Watchdog
+          # Dead man's switch. Always firing, by design. It must be routed to a service
+          # that alerts when it STOPS arriving -- otherwise a dead Prometheus and a
+          # perfectly healthy system look exactly the same from where you sit.
+          expr: vector(1)
+          labels: { severity: none }
+          annotations:
+            summary: "Dead man's switch — if this STOPS arriving, monitoring is down."
+            runbook_url: "https://github.com/tutac/revealroll-platform/blob/main/docs/runbooks/app-down.md"

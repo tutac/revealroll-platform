@@ -18,6 +18,28 @@ nodeExporter: { enabled: false }
 
 # The same reasoning applied to the alerting rules: the chart ships rule groups for the
 # control-plane components k3s does not expose. They would fire immediately and forever.
+# ── The node is dual-stack; the kubelet only answers on IPv4 ───────────────────
+# The operator builds kubelet targets from every address the node registers, so the IPv6
+# address becomes three permanently-down targets (metrics, cadvisor, probes). Dropping
+# them here is a monitoring-side fix for a monitoring-side artefact -- the alternative,
+# pinning k3s to a single node-ip, changes how the node registers itself to silence a
+# scrape config, which is the tail wagging the dog.
+#
+# Each list REPLACES the chart's default relabeling, so the default metrics_path rule is
+# repeated below. Dropping it would leave every kubelet series without metrics_path.
+kubelet:
+  serviceMonitor:
+    relabelings: &dropIpv6Targets
+      - action: replace
+        sourceLabels: [__metrics_path__]
+        targetLabel: metrics_path
+      - action: drop
+        sourceLabels: [__address__]
+        regex: '\[.+\]:.*'
+    cAdvisorRelabelings: *dropIpv6Targets
+    probesRelabelings: *dropIpv6Targets
+    resourceRelabelings: *dropIpv6Targets
+
 defaultRules:
   create: true
   rules:

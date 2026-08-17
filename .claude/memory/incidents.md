@@ -112,6 +112,80 @@ day, before any key existed on the box.
 
 ---
 
+## 2026-08-17 — Everything on 80/443 refused after a routine Ansible run
+
+**Type:** real incident
+**Severity:** total outage — `stg.revealroll.com`, `argocd.stg`, and `grafana.stg` all unreachable
+from the internet, while the cluster reported itself entirely healthy
+
+**Detected:** by accident, ~20 minutes in, and not by anything designed to detect it. A `curl`
+against the newly-created Grafana hostname failed; the first assumption was that Grafana's ingress
+or certificate was wrong. Only when the *app's* hostname failed the same way did it become clear
+this was not about Grafana at all. Nothing alerted, and `kubectl` showed a green cluster the entire
+time: every pod `Running`, node `Ready`, no memory or disk pressure, ingress-nginx up for 2d23h
+with zero restarts.
+
+**Impact:** total loss of public access for roughly 20 minutes. Nothing inside the cluster was
+damaged or restarted; the site was simply unreachable.
+
+**Timeline:**
+- ~16:10 — `make ansible-site` run to apply the node-exporter rebind (Stage 08.1)
+- ~16:10 — public access to 80/443 stops. No signal anywhere.
+- 16:33 — `curl https://grafana.stg.revealroll.com` fails; suspected a Grafana ingress/cert problem
+- 16:34 — the app and Argo CD hostnames fail identically → not Grafana, and not TLS
+- 16:35 — raw TCP to `:80` and `:443` refused; cluster confirmed healthy, so the fault is on the host
+- 16:36 — `nft list table ip nat` on the host: `KUBE-*` chains present, **zero `CNI-HOSTPORT` chains**
+- 16:38 — `kubectl rollout restart daemonset ingress-nginx-controller` → access restored
+- 16:45 — template fixed, `make ansible-site` re-run, `smoke.sh` still passing → fix confirmed
+
+**Root cause:** `roles/firewall/templates/nftables.conf.j2` began with `flush ruleset`, which
+deletes **every** nftables table on the host, not only the one Ansible owns. ingress-nginx reaches
+the internet through `hostPort` 80/443, which is implemented by the CNI portmap plugin as DNAT
+rules in `table ip nat`. Those rules are written **once, when the pod sandbox is created, and never
+reconciled**. Flushing them is therefore permanent until something recreates the pod.
+
+What made this invisible for so long is that almost everything else the flush destroyed *does*
+self-heal: kube-proxy continuously rebuilds its `KUBE-*` chains within seconds. So the ruleset
+looks correct moments later, and the only casualty is the one component whose rules nobody rewrites.
+
+This has almost certainly happened on **every `site.yml` run since k3s was installed in Stage 03**.
+It went unnoticed because until Stage 06 there was nothing behind the ingress to notice, and
+because ingress-nginx pods were being recreated frequently while the platform was being built.
+
+**Fix:** the template now declares and deletes only its own table (`table inet filter` /
+`delete table inet filter`) instead of flushing the ruleset. Declaring before deleting keeps it
+idempotent on a host where the table does not exist yet. Verified by re-running `site.yml` and
+confirming both that `smoke.sh` still passes and that the `CNI-HOSTPORT` chains survive.
+
+**MTTD:** ~20m (accidental) **MTTR:** ~5m once correctly identified, ~3m of that being the pod restart
+
+**What would have caught this sooner:** anything probing the site from **outside** the cluster.
+Every signal available at the time was internal, and every internal signal said "healthy" — this is
+the textbook case for black-box monitoring, and it is a far better argument for Stage 08.3 and
+08.10 than the course text's. A `wait_for` on 443 from the control node at the end of `site.yml`
+would have failed the run at the moment of breakage, which is the same lesson the 2026-08-12 SSH
+incident produced and the same action item still open from it.
+
+**Diagnostic note:** the first hypothesis was resource pressure from the monitoring stack that had
+just been installed — plausible, since the outage coincided with it, and wrong. `kubectl describe
+node` disproved it in one command (34% memory requested, no pressure conditions). Coincidence in
+time is the weakest form of evidence and it was the first thing reached for.
+
+**What went well:** `scripts/smoke.sh`, written the same afternoon, was what confirmed both the
+breakage and the fix. A one-command answer to "is the site actually up?" is worth writing before
+you need it.
+
+**Action items:**
+- [x] Stop flushing the whole ruleset in `roles/firewall` — done 2026-08-17
+- [ ] Add an external `wait_for` on 443 to the end of `site.yml`, so an Ansible run that breaks
+      public access fails loudly — by 2026-08-24
+- [ ] Blackbox-exporter probe of `https://stg.revealroll.com` with an alert (Stage 08.3) — by 2026-08-24
+- [ ] External uptime check that survives the whole node dying (Stage 08.10) — by 2026-08-24
+- [ ] Check whether anything else on this host depends on rules written once and never reconciled
+      (k3s servicelb is disabled, so hostPort is believed to be the only one) — by 2026-08-24
+
+---
+
 ## Planned game days (Stage 10)
 
 Tick these off as you run them. Write the hypothesis **before** you break anything — otherwise you

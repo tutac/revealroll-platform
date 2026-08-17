@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  # Everything that is *about* monitoring rather than *part of* it: Probes now,
+  # PrometheusRules in 08.7. All plain manifests, no chart -- these are our own objects,
+  # and wrapping them in a chart would add templating nobody needs.
+  #
+  # It is a separate Application from kube-prometheus-stack on purpose: an alert rule
+  # typo should fail its own sync, not leave the whole monitoring stack OutOfSync.
+  source:
+    repoURL: https://github.com/tutac/revealroll-platform.git
+    targetRevision: main
+    path: observability
+    directory:
+      recurse: true
+      # dashboards/ holds raw Grafana JSON, which is not a Kubernetes manifest. In 08.6 it
+      # gets wrapped into labelled ConfigMaps; until then Argo must not try to apply it.
+      exclude: "dashboards/*"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+  revisionHistoryLimit: 10

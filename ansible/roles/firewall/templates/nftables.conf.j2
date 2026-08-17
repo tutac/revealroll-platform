@@ -1,6 +1,19 @@
 #!/usr/sbin/nft -f
 # MANAGED BY ANSIBLE -- roles/firewall. Hand edits are lost on the next run.
-flush ruleset
+
+# Replace ONLY our own table. `flush ruleset` here is what took staging down on
+# 2026-08-17 (see .claude/memory/incidents.md): it deletes every table on the host,
+# including the ones k3s and the CNI own.
+#
+# kube-proxy survives that -- it reconciles its KUBE-* chains within seconds and you never
+# notice. The CNI portmap plugin does NOT: it writes ingress-nginx's hostPort 80/443 DNAT
+# rules once, when the pod sandbox is created, and never checks them again. Flushing them
+# leaves a healthy-looking cluster that the internet cannot reach.
+#
+# Declaring the table before deleting it makes this idempotent on a host where it does not
+# exist yet -- `delete table` alone fails on a first run.
+table inet filter
+delete table inet filter
 
 {% set cni = firewall_cni_interfaces | map('regex_replace', '^(.*)$', '"\\1"') | join(', ') %}
 table inet filter {

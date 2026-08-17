@@ -1,0 +1,47 @@
+# Values for prometheus-blackbox-exporter 11.17.2.
+#
+# Tiny by design: it makes HTTP requests and reports whether they worked. The Probe CRs
+# that say WHAT to check live in observability/probes/ -- keeping targets out of the chart
+# values means adding a URL is a one-line diff in an obvious place.
+
+resources:
+  requests: { cpu: 10m, memory: 24Mi }
+  limits: { memory: 64Mi }
+
+# The chart can create its own ServiceMonitor to scrape the exporter's *self* metrics.
+# That is not the same thing as the probe results, which arrive via the Probe CRs.
+serviceMonitor:
+  enabled: true
+  selfMonitor:
+    enabled: true
+
+config:
+  modules:
+    http_2xx:
+      prober: http
+      timeout: 10s
+      http:
+        valid_http_versions: [HTTP/1.1, HTTP/2.0]
+        valid_status_codes: [] # any 2xx
+        method: GET
+        follow_redirects: true
+        # false = verify the certificate. A probe that accepts any certificate cannot
+        # tell you that TLS broke, and TLS breaking is one of the failures most likely
+        # to happen here (cert-manager renewals are unattended).
+        tls_config:
+          insecure_skip_verify: false
+        preferred_ip_protocol: ip4
+        ip_protocol_fallback: false
+
+    # For endpoints that legitimately answer with a redirect or an auth challenge --
+    # Argo CD and Grafana return 200 on their login pages, but this exists for the day
+    # one of them is put behind basic auth.
+    http_2xx_no_redirect:
+      prober: http
+      timeout: 10s
+      http:
+        method: GET
+        follow_redirects: false
+        valid_status_codes: [200, 301, 302, 401]
+        preferred_ip_protocol: ip4
+        ip_protocol_fallback: false

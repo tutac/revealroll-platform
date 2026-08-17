@@ -1,0 +1,30 @@
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: public-endpoints
+  namespace: monitoring
+  labels:
+    # Prometheus is configured with probeSelectorNilUsesHelmValues: false, so this is
+    # picked up regardless -- the label stays for consistency with the other CRs and in
+    # case that setting is ever tightened.
+    release: kube-prometheus-stack
+spec:
+  jobName: blackbox-http
+  # 30s is the app's tolerance for "how long may we be down before a graph shows it".
+  # Faster costs nothing here (three targets), and detection time was the whole failing
+  # in the 2026-08-17 outage.
+  interval: 30s
+  scrapeTimeout: 15s
+  module: http_2xx
+  prober:
+    url: blackbox-exporter-prometheus-blackbox-exporter.monitoring.svc.cluster.local:9115
+  targets:
+    staticConfig:
+      # Public hostnames, not Service DNS. Probing the Service would skip DNS, the
+      # firewall, the hostPort DNAT and TLS -- which is precisely the part that broke.
+      static:
+        - https://stg.revealroll.com
+        - https://argocd.stg.revealroll.com
+        - https://grafana.stg.revealroll.com
+      labels:
+        environment: staging

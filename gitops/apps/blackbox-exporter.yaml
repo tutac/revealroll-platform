@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: blackbox-exporter
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  # Probes the site the way a user does: over the public hostname, through DNS, the
+  # firewall, ingress-nginx's hostPort and TLS. Every other signal in this cluster is
+  # internal, and on 2026-08-17 every internal signal said "healthy" while nothing on
+  # 80/443 was reachable. This is the check that would have caught it.
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: prometheus-blackbox-exporter
+      targetRevision: 11.17.2
+      helm:
+        valueFiles:
+          - $values/gitops/apps/_values/blackbox-exporter.yaml
+    - repoURL: https://github.com/tutac/revealroll-platform.git
+      targetRevision: main
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+  revisionHistoryLimit: 10

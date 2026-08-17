@@ -92,6 +92,9 @@ apps: ## Argo CD application status
 seal: ## Seal .env.staging into secrets/staging/ (never commits plaintext)
 	./scripts/seal-env.sh .env.staging revealroll
 
+seal-registry: ## Seal a GHCR pull credential so private images survive a cluster rebuild
+	./scripts/seal-registry.sh revealroll
+
 backup-key: ## Back up the sealed-secrets private key — LOSE THIS AND ALL SECRETS DIE
 	@umask 077 && KUBECONFIG=$(KUBECONFIG_PATH) kubectl get secret -n kube-system \
 	  -l sealedsecrets.bitnami.com/sealed-secrets-key -o yaml > $(HOME)/sealed-secrets-master.key
@@ -125,5 +128,5 @@ lint: ## Every pre-push check (the same ones CI runs)
 
 .PHONY: help tf-init tf-plan tf-apply tf-output tf-fmt \
         ansible-ping ansible-site ansible-check ansible-verify idempotency \
-        kubeconfig nodes broken argocd-password apps \
-        seal backup-key smoke cert ports lint
+        kubeconfig tunnel nodes broken argocd-password apps \
+        seal seal-registry backup-key smoke cert ports lint

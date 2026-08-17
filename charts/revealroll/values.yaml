@@ -1,0 +1,153 @@
+# Defaults. Environment-specific overrides live in values-staging.yaml.
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/tutac/revealroll
+  # Never "latest", never a moving tag. Set per environment; CI writes it.
+  tag: ""
+  # IfNotPresent is safe ONLY because tags are immutable here. With a mutable tag it
+  # would silently keep running yesterday's bytes.
+  pullPolicy: IfNotPresent
+
+# Only needed while the GHCR package is private. Leave empty for a public package.
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# The sealed Secret from Stage 05, mounted wholesale with envFrom. One Secret with ~40
+# keys is why envFrom rather than forty secretKeyRef blocks.
+env:
+  secretName: revealroll-env
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+ingress:
+  enabled: true
+  className: nginx
+  host: stg.revealroll.com
+  tlsSecretName: revealroll-tls
+  clusterIssuer: letsencrypt-prod
+  annotations: {}
+
+resources:
+  requests:
+    cpu: 100m
+    # request == limit for memory: it puts the pod in the Guaranteed-ish QoS band for
+    # memory and removes the class of surprise where a node under pressure evicts you
+    # for using what you asked for.
+    memory: 512Mi
+  limits:
+    memory: 512Mi
+    # No CPU limit on purpose. CPU is compressible: exceeding a limit means throttling,
+    # which shows up as latency nobody can explain. Bursting into idle node CPU is
+    # better behaviour than being throttled to the request.
+
+# Probes are TCP, deliberately.
+#
+# The app exposes /api/health, but it is a DEEP check — it queries Supabase, checks cron
+# liveness and storage headroom, and returns 503 if any is unhappy. As a liveness probe
+# that is actively harmful: a Supabase blip would make kubelet restart every pod, during
+# an outage restarting cannot fix. As a readiness probe, stale crons would remove every
+# pod from the Service and take the site down for a reason unrelated to serving traffic.
+#
+# A liveness probe answers "is this process wedged?", nothing more. /api/health belongs to
+# an uptime monitor and to blackbox alerting in Stage 08 — which is what its own docstring
+# says it is for.
+probes:
+  startup:
+    periodSeconds: 2
+    failureThreshold: 30 # 60s to boot before liveness applies
+  liveness:
+    periodSeconds: 10
+    failureThreshold: 3
+  readiness:
+    periodSeconds: 5
+    failureThreshold: 3
+
+strategy:
+  maxUnavailable: 0 # new pod Ready before an old one leaves → zero-downtime
+  maxSurge: 1
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+autoscaling:
+  # Off by default. On a single node an HPA can only add pods that compete for the same
+  # CPU, so it buys little until there is a second node. The template is here so turning
+  # it on is a values change.
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 80
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+# readOnlyRootFilesystem needs somewhere writable. Next.js standalone writes its cache and
+# uses /tmp for image processing; emptyDir gives both without making the whole FS writable.
+writableVolumes:
+  - name: tmp
+    mountPath: /tmp
+  - name: next-cache
+    mountPath: /app/.next/cache
+
+# Scheduled work. On Vercel these are `crons` in vercel.json, run by the platform. k3s has
+# no such thing, so each becomes a CronJob that calls the same endpoint with CRON_SECRET.
+# Keep this list in step with vercel.json in the app repo — they are two expressions of the
+# same schedule, and the app's own /api/health reports any job that stops firing.
+cronJobs:
+  enabled: true
+  image: curlimages/curl:8.11.1
+  secretKey: CRON_SECRET
+
+  timeoutSeconds: 55 # shorter than the tightest schedule (60s)
+  activeDeadlineSeconds: 120
+  startingDeadlineSeconds: 60
+  backoffLimit: 1
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 16Mi
+    limits:
+      memory: 32Mi
+
+  # Mirrors vercel.json `crons`, verified 2026-08-17.
+  jobs:
+    - { name: reveal-albums, schedule: "* * * * *" }
+    - { name: process-downloads, schedule: "* * * * *" }
+    - { name: process-photos, schedule: "* * * * *" }
+    - { name: push-reminders, schedule: "*/15 * * * *" }
+    - { name: nudge-idle-guests, schedule: "*/30 * * * *" }
+    - { name: cleanup-revealed-originals, schedule: "30 * * * *" }
+    - { name: cleanup-demo, schedule: "0 * * * *" }
+    - { name: cleanup-deleted, schedule: "0 0 * * *" }
+    - { name: cleanup-downloads, schedule: "0 3 * * *" }
+    - { name: cleanup-sessions, schedule: "0 4 * * *" }
+    - { name: cleanup-expired-events, schedule: "0 5 * * *" }
+    - { name: warn-expiring-events, schedule: "0 6 * * *" }
+    - { name: cleanup-guest-users, schedule: "0 7 * * *" }
+    - { name: sync-audience, schedule: "0 8 * * *" }
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

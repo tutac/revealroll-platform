@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "revealroll.fullname" . }}
+  labels:
+    {{- include "revealroll.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  {{- /* Omitted when the HPA owns replicas, otherwise Helm and the HPA fight forever. */}}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # maxUnavailable: 0 means a new pod must be Ready before an old one is removed.
+      # With a readiness probe that tells the truth, this is what makes a deploy invisible
+      # to users rather than a brief burst of 502s.
+      maxUnavailable: {{ .Values.strategy.maxUnavailable }}
+      maxSurge: {{ .Values.strategy.maxSurge }}
+
+  selector:
+    matchLabels:
+      {{- include "revealroll.selectorLabels" . | nindent 6 }}
+
+  template:
+    metadata:
+      labels:
+        {{- include "revealroll.labels" . | nindent 8 }}
+      annotations:
+        {{- /*
+          Env vars are read once at process start, so a re-sealed Secret sits unused until
+          something restarts the pods. Hashing the Secret's contents into the pod template
+          means changing the Secret changes the spec, which triggers a rollout by itself.
+
+          `lookup` returns an empty dict during `helm template` and on a dry run (no API
+          server to ask), hence the guard: the annotation is simply absent there. That is
+          correct — it also means `helm template` output is stable and diffable.
+        */}}
+        {{- $secret := lookup "v1" "Secret" .Release.Namespace .Values.env.secretName }}
+        {{- if and $secret $secret.data }}
+        checksum/secret: {{ $secret.data | toYaml | sha256sum }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ required "image.tag must be set — never deploy a floating tag" .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+
+          # All ~40 runtime values in one shot. NEXT_PUBLIC_* are absent on purpose:
+          # they were inlined into the client bundle at build time and setting them here
+          # changes nothing the browser sees.
+          envFrom:
+            - secretRef:
+                name: {{ .Values.env.secretName }}
+
+          # TCP, not /api/health — see the long note in values.yaml. A deep health check
+          # wired to liveness turns a dependency outage into a restart loop.
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          {{- with .Values.writableVolumes }}
+          volumeMounts:
+            {{- range . }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+            {{- end }}
+          {{- end }}
+
+      {{- with .Values.writableVolumes }}
+      volumes:
+        {{- range . }}
+        - name: {{ .name }}
+          emptyDir: {}
+        {{- end }}
+      {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,37 @@
+{{- if .Values.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "revealroll.fullname" . }}
+  labels:
+    {{- include "revealroll.labels" . | nindent 4 }}
+  annotations:
+    # This annotation is the whole certificate workflow: cert-manager watches Ingresses,
+    # sees the named ClusterIssuer, solves HTTP-01 at /.well-known/acme-challenge/ through
+    # this same ingress, and writes the result into tls.secretName below. Renewal is
+    # automatic and needs no further action for as long as port 80 stays open.
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer | quote }}
+    # Next.js serves its own uploads path; the controller default of 1m is too small for
+    # photo uploads and shows up as a 413 the app never sees.
+    nginx.ingress.kubernetes.io/proxy-body-size: "16m"
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host | quote }}
+      secretName: {{ .Values.ingress.tlsSecretName }}
+  rules:
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "revealroll.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+{{- end }}

@@ -1,0 +1,73 @@
+{{- if .Values.cronJobs.enabled }}
+{{- $root := . }}
+{{- range .Values.cronJobs.jobs }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "revealroll.fullname" $root }}-{{ .name }}
+  labels:
+    {{- include "revealroll.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: cron
+spec:
+  schedule: {{ .schedule | quote }}
+
+  # Vercel Cron ran these in production; nothing runs them on k3s unless we do. The
+  # every-minute jobs are the ones that matter: without reveal-albums an event never
+  # reveals, and the failure is silent — the app looks fine and simply never progresses.
+  concurrencyPolicy: Forbid
+
+  # A missed schedule (node down, controller restart) should be skipped, not replayed.
+  # Without this bound, a controller that was down for an hour fires 60 backlogged runs
+  # of a once-a-minute job at once.
+  startingDeadlineSeconds: {{ $root.Values.cronJobs.startingDeadlineSeconds }}
+
+  successfulJobsHistoryLimit: {{ $root.Values.cronJobs.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ $root.Values.cronJobs.failedJobsHistoryLimit }}
+
+  jobTemplate:
+    spec:
+      backoffLimit: {{ $root.Values.cronJobs.backoffLimit }}
+      # Stop a wedged run before the next schedule so Forbid does not block forever.
+      activeDeadlineSeconds: {{ default $root.Values.cronJobs.activeDeadlineSeconds .activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "revealroll.selectorLabels" $root | nindent 12 }}
+            app.kubernetes.io/component: cron
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            {{- toYaml $root.Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: curl
+              image: {{ $root.Values.cronJobs.image | quote }}
+              securityContext:
+                {{- toYaml $root.Values.securityContext | nindent 16 }}
+              env:
+                # Only the one key, not envFrom: this pod has no business holding the
+                # Stripe or Supabase credentials just to call an HTTP endpoint.
+                - name: CRON_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ $root.Values.env.secretName }}
+                      key: {{ $root.Values.cronJobs.secretKey }}
+              # In-cluster Service address, not the public hostname: this stays inside the
+              # cluster, skips ingress and TLS entirely, and keeps working when DNS or the
+              # certificate is broken — which is exactly when you least want the scheduled
+              # work to stop as well.
+              #
+              # -f makes curl exit non-zero on a 4xx/5xx, so a failing job shows up as a
+              # failed Job instead of a green one that quietly did nothing. --max-time
+              # bounds it; -sS keeps output quiet but still prints real errors.
+              command:
+                - sh
+                - -c
+                - >-
+                  curl -fsS --max-time {{ $root.Values.cronJobs.timeoutSeconds }}
+                  -H "Authorization: Bearer $CRON_SECRET"
+                  http://{{ include "revealroll.fullname" $root }}.{{ $root.Release.Namespace }}.svc.cluster.local:{{ $root.Values.service.port }}/api/cron/{{ .name }}
+              resources:
+                {{- toYaml $root.Values.cronJobs.resources | nindent 16 }}
+{{- end }}
+{{- end }}

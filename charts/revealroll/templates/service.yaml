@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "revealroll.fullname" . }}
+  labels:
+    {{- include "revealroll.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      # Named target port: the Deployment can change which number it listens on without
+      # this file knowing. Ingress refers to the service port, so nothing else moves.
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "revealroll.selectorLabels" . | nindent 4 }}

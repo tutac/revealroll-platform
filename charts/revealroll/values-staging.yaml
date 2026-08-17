@@ -1,0 +1,18 @@
+# Staging overrides.
+#
+# The tag below is the single source of truth for "what is running in staging?".
+# CI writes this line and nothing else; rollback is `git revert` of the bump commit.
+image:
+  tag: sha-ad31cb9
+
+ingress:
+  host: stg.revealroll.com
+  clusterIssuer: letsencrypt-prod
+
+replicaCount: 2
+
+# The GHCR package is private, so the node needs a credential to pull. Created by
+# scripts/seal-registry.sh and committed as secrets/staging/ghcr-sealed.yaml, so it
+# survives a cluster rebuild instead of living only in the cluster.
+imagePullSecrets:
+  - name: ghcr

@@ -1,0 +1,17 @@
+{{- if .Values.podDisruptionBudget.enabled -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "revealroll.fullname" . }}
+  labels:
+    {{- include "revealroll.labels" . | nindent 4 }}
+spec:
+  # Protects against VOLUNTARY disruption only — `kubectl drain`, evictions, node
+  # maintenance. It does nothing for a node that dies, and on a single-node cluster a
+  # drain with minAvailable: 1 will block rather than take the site down. That blocking
+  # is the feature: it forces you to notice.
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "revealroll.selectorLabels" . | nindent 6 }}
+{{- end }}

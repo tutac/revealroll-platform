@@ -1,0 +1,11 @@
+apiVersion: v2
+name: revealroll
+description: RevealRoll — Next.js standalone app running on k3s staging.
+type: application
+
+# version    = the CHART's version. Bump when templates change.
+# appVersion = informational only. The actual deployed artifact is image.tag in
+#              values-staging.yaml, written by CI, because "what is running?" must be
+#              answerable by reading one line rather than by correlating two.
+version: 0.1.0
+appVersion: "1.0.0"

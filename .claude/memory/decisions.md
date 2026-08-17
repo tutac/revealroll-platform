@@ -356,6 +356,71 @@ is reachable only by someone who already holds an SSH key for the `deploy` user.
 
 ---
 
+## 012 — Sealed secrets as their own Application, not files inside the chart
+
+**Date:** 2026-08-17
+**Status:** accepted
+
+**Context:** The app's credentials live in `secrets/staging/` as SealedSecrets (decision 002's
+machinery). Stage 07 had to put them somewhere Argo CD would apply them. Two obvious homes: move the
+sealed files into `charts/revealroll/templates/`, or point a second Application at the directory.
+
+**Decision:** a second Application, `gitops/apps/revealroll-secrets.yaml`, with a directory source on
+`secrets/staging`. The chart renders no secrets at all; it only names the Secret it consumes with
+`envFrom`.
+
+**Alternatives considered:**
+- *Sealed files in the chart's `templates/`* — one Application instead of two, and the secret is
+  versioned with the code that reads it. Rejected on two counts. Rotating a credential would become a
+  chart change, so it would show up in the same diff as an image bump and be reviewed with the same
+  (low) attention. And a bad secret and a bad release could no longer fail independently — one
+  Application would go unhealthy and you would not immediately know which half caused it.
+- *A Helm-managed Secret with values from CI* — puts plaintext in the CI system and in the release
+  history. Excluded by the repo's one secret rule.
+
+**Consequences:**
+- Credentials are reviewable on their own: a PR touching `secrets/staging/` touches nothing else.
+- Two Applications must both be Healthy for the app to work, and a missing Secret presents as a
+  CrashLoopBackOff in `revealroll` while `revealroll-secrets` looks fine. Worth knowing before 2 a.m.
+- Only the SealedSecret is ever committed. The plaintext Secret the controller derives from it must
+  never be, or Argo and the controller will each keep rewriting it and the app will flap OutOfSync.
+
+---
+
+## 013 — Bootstrap is two applies: AppProjects, then the root app
+
+**Date:** 2026-08-17
+**Status:** accepted
+
+**Context:** The app-of-apps (`gitops/root-app.yaml`) is declared in project `platform`, and the
+`platform` AppProject is itself a file under `gitops/` — so the root app is supposed to create the
+project it belongs to. Argo validates an Application's project reference *before* it reads the
+repository, so the first `kubectl apply -f gitops/root-app.yaml` landed as
+`Unknown / Unknown` with `InvalidSpecError: Application referencing project platform which does not
+exist`. It cannot create its way out of that.
+
+**Decision:** the documented bootstrap is `kubectl apply -f gitops/projects/` followed by
+`kubectl apply -f gitops/root-app.yaml`. Both project files stay in Git; root-app adopts them on its
+first sync and owns them from then on. The manual apply is a one-time seed, not an ongoing exception.
+
+**Alternatives considered:**
+- *Put root-app in the built-in `default` project* — one command instead of two, and the ordering
+  problem disappears because `default` always exists. Rejected because `default` permits every source
+  repo, every destination and every resource kind: the one Application with authority over all the
+  others would be the one with no boundary on it.
+- *Sync waves on the project files* — waves order resources *within* a sync, and this failure happens
+  before the sync starts. Wrong tool.
+
+**Consequences:**
+- Rebuilding the cluster from scratch is two applies, and they must be in that order. Written down
+  here because it is exactly the kind of step that gets lost between rebuilds.
+- The recovery path is unchanged and still works: `kubectl apply -f gitops/root-app.yaml`, then
+  `argocd app sync root-app --force`.
+- `root-app` deliberately carries no `resources-finalizer` — deleting it must not cascade into
+  deleting every Application and therefore the platform.
+
+---
+
 ## Template for new entries
 
 ```markdown

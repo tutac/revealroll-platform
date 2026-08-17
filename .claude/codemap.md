@@ -92,7 +92,12 @@ belongs to Argo CD. See the layer-ownership rule in [`../CLAUDE.md`](../CLAUDE.m
 | Label definitions (⚠ selector is immutable) | `charts/revealroll/templates/_helpers.tpl` | `revealroll.labels`, `revealroll.selectorLabels` | ⏳ 06 |
 
 ⚠️ Never put a changing value (like `image.tag`) in `revealroll.selectorLabels` —
-`Deployment.spec.selector` is immutable and `helm upgrade` will fail permanently.
+`Deployment.spec.selector` is immutable, so every Argo sync after the change fails permanently and
+the only way out is deleting the Deployment.
+
+**Deploying is committing.** Since Stage 07 nothing here is applied with `helm install/upgrade`:
+edit the values file, push, and Argo CD converges. `helm template` / `helm lint` locally are still
+the right way to check a change before it goes.
 
 ---
 
@@ -100,16 +105,31 @@ belongs to Argo CD. See the layer-ownership rule in [`../CLAUDE.md`](../CLAUDE.m
 
 | What | File | Symbol / key | Stage |
 |------|------|--------------|-------|
-| **Add a new platform component** | `gitops/apps/<name>.yaml` | a new `Application` — that's the whole process | ⏳ 07 |
-| The app-of-apps root | `gitops/root-app.yaml` | `Application.spec.source.path: gitops` | ⏳ 07 |
-| What the app is allowed to create | `gitops/projects/apps.yaml` | `namespaceResourceWhitelist` | ⏳ 07 |
-| What platform charts are allowed | `gitops/projects/platform.yaml` | `sourceRepos`, `destinations` | ⏳ 07 |
-| Turn auto-sync / prune / selfHeal on or off | `gitops/apps/revealroll.yaml` | `syncPolicy.automated` | ⏳ 07 |
-| Silence a permanent OutOfSync | `gitops/apps/<name>.yaml` | `spec.ignoreDifferences` | ⏳ 07 |
+| **Add a new platform component** | `gitops/apps/<name>.yaml` | a new `Application` — that's the whole process | ✅ 07 |
+| The app-of-apps root | `gitops/root-app.yaml` | `Application.spec.source.path: gitops` | ✅ 07 |
+| Which files the root app must NOT apply | `gitops/root-app.yaml` | `directory.exclude` — itself, and `apps/_values/*` | ✅ 07 |
+| What the app is allowed to create | `gitops/projects/apps.yaml` | `namespaceResourceWhitelist` — enumerated, not `*` | ✅ 07 |
+| What platform charts are allowed | `gitops/projects/platform.yaml` | `sourceRepos`, `destinations` | ✅ 07 |
+| Turn auto-sync / prune / selfHeal on or off | `gitops/apps/revealroll.yaml` | `syncPolicy.automated` | ✅ 07 |
+| Where the app's secrets are deployed from | `gitops/apps/revealroll-secrets.yaml` | directory source on `secrets/staging` (decision 012) | ✅ 07 |
+| Silence a permanent OutOfSync | `gitops/apps/<name>.yaml` | `spec.ignoreDifferences` — last resort; see below | ✅ 07 |
 | Upstream chart versions & values | `gitops/apps/_values/*.yaml` | per chart | ⏳ 08 |
 
+⚠️ **Bootstrapping a rebuilt cluster is two applies, in this order** — an Application is rejected
+before its repo is ever read if its project doesn't exist yet (decision 013):
+
+```bash
+kubectl apply -f gitops/projects/      # seed the AppProjects
+kubectl apply -f gitops/root-app.yaml  # root-app then adopts them from Git
+```
+
 ⚠️ **Recovery path if Argo CD can't fix itself:** `kubectl apply -f gitops/root-app.yaml`.
-That is the only sanctioned manual apply in this repo.
+Those are the only sanctioned manual applies in this repo.
+
+⚠️ **Permanently OutOfSync with an empty diff** is usually a field in Git that the API server drops
+or defaults away — a zero value (`recurse: false`, `enabled: false`) that Argo omits when storing.
+Delete the field. `ignoreDifferences` hides the mismatch instead of removing it, and belongs only
+where another controller genuinely owns the field.
 
 ---
 

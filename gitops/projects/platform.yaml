@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  description: Infrastructure components. Wide permissions, narrow membership.
+
+  sourceRepos:
+    - https://github.com/tutac/revealroll-platform.git
+    # Upstream charts Stage 08 pulls. Listed ahead of time because a missing entry
+    # here surfaces as "application repo ... is not permitted", which reads like a
+    # network problem and is not one.
+    - https://prometheus-community.github.io/helm-charts
+    - https://grafana.github.io/helm-charts
+
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: argocd
+    - server: https://kubernetes.default.svc
+      namespace: monitoring
+    - server: https://kubernetes.default.svc
+      namespace: logging
+    # kube-system is present ONLY because node-level agents (Alloy, node-exporter)
+    # legitimately land there. It is not a blanket grant: nothing else in this repo
+    # targets it.
+    - server: https://kubernetes.default.svc
+      namespace: kube-system
+
+  # ingress-nginx, cert-manager and sealed-secrets are intentionally absent: those
+  # four are Terraform's (stack 02-cluster-bootstrap), per the layer-ownership rule
+  # in CLAUDE.md. If an Application here ever needs them, the layer is wrong.
+
+  # Monitoring charts create CRDs, ClusterRoles and PodSecurityPolicies of their own.
+  # Enumerating those is a losing game, so platform gets "*" — the boundary that
+  # matters for this project is *which namespaces*, above, not which kinds.
+  clusterResourceWhitelist:
+    - { group: "*", kind: "*" }
+  namespaceResourceWhitelist:
+    - { group: "*", kind: "*" }

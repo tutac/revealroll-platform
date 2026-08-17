@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: apps
+  namespace: argocd
+spec:
+  description: Application workloads. Nothing here should ever touch the platform.
+
+  # One repo. An Application in this project that points anywhere else is refused at
+  # sync time, which is the cheapest possible defence against a copy-pasted repoURL.
+  sourceRepos:
+    - https://github.com/tutac/revealroll-platform.git
+
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: revealroll
+
+  # Empty on purpose. An application workload has no business creating ClusterRoles,
+  # CRDs or namespaces. If a chart here ever needs one, that is a signal the thing
+  # belongs in the `platform` project instead.
+  clusterResourceWhitelist: []
+
+  # The exact set charts/revealroll/templates/ renders, plus what Stage 08 will add.
+  # Deliberately enumerated rather than "*": the day a template starts emitting
+  # something unexpected, the sync fails loudly instead of quietly succeeding.
+  namespaceResourceWhitelist:
+    - { group: "", kind: Service }
+    - { group: "", kind: ConfigMap }
+    - { group: "", kind: Secret }
+    - { group: apps, kind: Deployment }
+    - { group: batch, kind: CronJob }
+    - { group: autoscaling, kind: HorizontalPodAutoscaler }
+    - { group: policy, kind: PodDisruptionBudget }
+    - { group: networking.k8s.io, kind: Ingress }
+    - { group: bitnami.com, kind: SealedSecret }
+    # Not rendered yet — added in Stage 08 so the scrape config is a values change
+    # rather than a values change *and* a project change.
+    - { group: monitoring.coreos.com, kind: ServiceMonitor }

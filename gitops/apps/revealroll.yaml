@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: revealroll
+  namespace: argocd
+  finalizers:
+    # Deleting this Application deletes what it created. Without the finalizer you get
+    # an orphaned Deployment nobody owns — the worst of both worlds.
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: apps
+
+  source:
+    repoURL: https://github.com/tutac/revealroll-platform.git
+    targetRevision: main
+    path: charts/revealroll
+    helm:
+      # The image tag lives in this file and nowhere else. CI rewrites that one line;
+      # rollback is `git revert` of the bump commit.
+      valueFiles: [values-staging.yaml]
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: revealroll
+
+  syncPolicy:
+    automated:
+      # prune: a resource removed from Git is removed from the cluster.
+      # selfHeal: a resource changed by hand is changed back.
+      # Together these are what makes this GitOps rather than a deploy button.
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # Delete owners before dependents, and wait. Without it a pruned Deployment can
+      # leave its ReplicaSet behind for a moment and the sync reports Healthy early.
+      - PrunePropagationPolicy=foreground
+
+  # Ten Argo-side revisions to roll back through. Independent of Helm's own history,
+  # which Argo does not use.
+  revisionHistoryLimit: 10

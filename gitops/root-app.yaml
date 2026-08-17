@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-app
+  namespace: argocd
+spec:
+  project: platform
+
+  # The app-of-apps. Its only job is to apply every manifest under gitops/ — the
+  # AppProjects and the Applications. After the one manual bootstrap apply, adding a
+  # platform component is a single committed file in gitops/apps/.
+  source:
+    repoURL: https://github.com/tutac/revealroll-platform.git
+    targetRevision: main
+    path: gitops
+    directory:
+      recurse: true
+      # root-app.yaml   — its own definition. Left in, Argo would manage itself, and a
+      #                   bad commit could leave it unable to reconcile its way out.
+      # apps/_values/*  — Helm values files for Stage 08's upstream charts. They are
+      #                   not Kubernetes manifests; Argo would fail trying to apply them.
+      exclude: "{root-app.yaml,apps/_values/*}"
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
+  # No finalizer, deliberately. Deleting root-app should not cascade into deleting
+  # every Application and therefore the whole platform.
+
+  # Recovery path, if a bad commit ever leaves Argo stuck:
+  #   kubectl apply -f gitops/root-app.yaml
+  #   argocd app sync root-app --force

@@ -1,0 +1,96 @@
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# This workflow only reads the repository. It cannot deploy, push commits, or
+# access the cluster, so automated tag-bump commits cannot create a loop.
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    name: Terraform format + validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Check Terraform formatting
+        run: terraform fmt -recursive -check
+
+      - name: Validate every Terraform stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          for stack in terraform/stacks/*/; do
+            echo "── validating ${stack}"
+            terraform -chdir="${stack%/}" init -backend=false -input=false
+            terraform -chdir="${stack%/}" validate
+          done
+
+  ansible:
+    name: Ansible lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Ansible and ansible-lint
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ansible ansible-lint
+
+      - name: Install required Ansible collections
+        working-directory: ansible
+        run: ansible-galaxy collection install -r requirements.yml
+
+      - name: Run ansible-lint
+        working-directory: ansible
+        run: ansible-lint
+
+  helm:
+    name: Helm + Kubernetes manifest validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+
+      - name: Lint the RevealRoll chart
+        run: helm lint charts/revealroll
+
+      - name: Install kubeconform
+        env:
+          KUBECONFORM_VERSION: v0.6.7
+        run: |
+          curl -fsSL \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            -o /tmp/kubeconform.tar.gz
+          tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
+          sudo install /tmp/kubeconform /usr/local/bin/kubeconform
+          kubeconform -v
+
+      - name: Validate rendered staging manifests
+        run: |
+          helm template charts/revealroll \
+            -f charts/revealroll/values-staging.yaml \
+            | kubeconform -strict -summary -ignore-missing-schemas -
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

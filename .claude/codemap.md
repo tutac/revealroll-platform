@@ -45,6 +45,7 @@ jurisdiction. The plain `<account>.r2.cloudflarestorage.com` returns `AccessDeni
 | Harden / unharden sshd | `ansible/roles/ssh-hardening/templates/00-hardening.conf.j2` | all — **`00-`, not `99-`**: sshd drop-ins resolve in lexical order and the FIRST value wins | ✅ 02 |
 | Install a package on the host | `ansible/roles/common/tasks/main.yml` | the `apt` task's `loop` | ✅ 02 |
 | Journald / log size caps | `ansible/roles/common/tasks/main.yml` | `SystemMaxUse`, `SystemMaxFileSize` | ✅ 02 |
+| **Set a kernel sysctl** | `ansible/roles/common/defaults/main.yml` | `common_sysctl_settings` → `/etc/sysctl.d/99-ansible.conf`. `vm.max_map_count` is SonarQube's Elasticsearch; the chart's privileged initContainer is disabled because of it | ✅ 14 |
 | fail2ban tuning, unban an IP | `ansible/roles/fail2ban/templates/jail.local.j2` | `maxretry`, `bantime`, `ignoreip` | ✅ 02 |
 | **Change the k3s version** | `ansible/roles/k3s-server/defaults/main.yml` | `k3s_version` — bump, then `site.yml` | ✅ 03 |
 | **Change a k3s runtime flag** | `ansible/roles/k3s-server/templates/config.yaml.j2` | flags live in `/etc/rancher/k3s/config.yaml`, not the systemd unit — a change is a diff + restart, not a reinstall | ✅ 03 |
@@ -114,6 +115,8 @@ the right way to check a change before it goes.
 | Where the app's secrets are deployed from | `gitops/apps/revealroll-secrets.yaml` | directory source on `secrets/staging` (decision 012) | ✅ 07 |
 | Silence a permanent OutOfSync | `gitops/apps/<name>.yaml` | `spec.ignoreDifferences` — last resort; see below | ✅ 07 |
 | Upstream chart versions & values | `gitops/apps/_values/*.yaml` | per chart | ⏳ 08 |
+| **SonarQube: version, memory, ingress** | `gitops/apps/_values/sonarqube.yaml` | `community.buildNumber`, `env` JVM heaps, `resources` | ✅ 14 |
+| SonarQube's database | `platform/sonarqube-db/postgres.yaml` | StatefulSet + headless Service — plain manifests, no chart (decision 014) | ✅ 14 |
 
 ⚠️ **Bootstrapping a rebuilt cluster is two applies, in this order** — an Application is rejected
 before its repo is ever read if its project doesn't exist yet (decision 013):
@@ -148,6 +151,7 @@ where another controller genuinely owns the field.
 | Which logs get collected | `gitops/apps/_values/alloy.yaml` | the discovery/relabel rules | ⏳ 08 |
 | Host metrics (survive cluster death) | `ansible/roles/node-exporter/` | systemd unit, binds `127.0.0.1:9100` | ✅ 02 |
 | SLO definitions | `docs/slo.md` | the PromQL, not the prose | ⏳ 10 |
+| SonarQube scraping | `gitops/apps/_values/sonarqube.yaml` | `prometheusMonitoring.podMonitor` — the chart's own PodMonitor, authenticated with the monitoring passcode | ✅ 14 |
 
 ⚠️ Loki retention needs **both** `retention_period` and `compactor.retention_enabled: true`.
 The first alone is a silent no-op and your disk fills.
@@ -163,6 +167,8 @@ The first alone is a silent no-op and your disk fills.
 | How sealing works / rotation policy | `secrets/README.md` | all | ⏳ 05 |
 | Which env var goes where | `docs-course/reference/env-mapping.md` | the mapping table | ✅ |
 | **Restore the sealing key** | *(password manager)* | see `secrets/README.md` → Disaster recovery | 04 |
+| SonarQube DB password + monitoring passcode | `scripts/seal-sonarqube.sh` → `secrets/sonarqube/` | keys `postgres-password`, `monitoring-passcode` | ✅ 14 |
+| SonarQube **admin** password | *(password manager only)* | deliberately not in Git — the chart's password Job would fail on every sync (decision 014) | ✅ 14 |
 
 ⚠️ `NEXT_PUBLIC_*` are **build-time** — Docker `--build-arg`, not Secret keys. Setting them only at
 runtime silently produces a bundle pointing at production.
@@ -181,6 +187,8 @@ undecryptable. It is backed up in the password manager. Re-back-up after any con
 | Where the ARGs are declared | `tutac/revealroll` → `Dockerfile` | builder stage | ⏳ 06 |
 | Platform repo validation | `.github/workflows/validate.yml` | tf / ansible / helm / gitleaks jobs | ⏳ 09 |
 | The cross-repo token | `tutac/revealroll` → repo secrets | `PLATFORM_REPO_TOKEN` (fine-grained, Contents:write) | ⏳ 09 |
+| **The quality gate** | `tutac/revealroll` → `.github/workflows/ci.yml` | job `sonar`, and `docker.needs` must include it — see `docs/sonarqube.md` | ✅ 14 |
+| The scanner token | `tutac/revealroll` → repo secrets | `SONAR_TOKEN` — a CI credential, so it is **not** sealed into this repo | ✅ 14 |
 
 ---
 
@@ -191,6 +199,7 @@ undecryptable. It is backed up in the password manager. Re-back-up after any con
 | Get a kubeconfig on your laptop | `scripts/fetch-kubeconfig.sh` | ✅ 03 |
 | Reach the kube-apiserver at all | `make tunnel` — 6443 is closed on purpose (decision 011) | ✅ 03 |
 | Seal a whole `.env` into one SealedSecret | `scripts/seal-env.sh` | ⏳ 05 |
+| Seal SonarQube's credentials | `scripts/seal-sonarqube.sh` | ✅ 14 |
 | Is the site up and is the cert healthy | `scripts/smoke.sh` — no cluster creds; `CERT_MIN_DAYS` to tighten | ✅ 07 |
 | Back up etcd + the sealing key to R2 | `scripts/backup-etcd.sh` | ⏳ 10 |
 | Common command shortcuts | `Makefile` | ✅ |

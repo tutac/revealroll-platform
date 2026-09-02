@@ -119,6 +119,24 @@ spec:
             summary: "{{ $labels.deployment }} has fewer available replicas than desired"
             runbook_url: "https://github.com/tutac/revealroll-platform/blob/main/docs/runbooks/app-down.md"
 
+    # ── Delivery tooling ─────────────────────────────────────────────────────
+    - name: sonarqube
+      rules:
+        - alert: SonarQubeUnavailable
+          # This overlaps PrometheusTargetDown deliberately. Same signal, different
+          # consequence and different runbook: when SonarQube is down the quality gate
+          # cannot pass, so nothing deploys -- and the CI failure says "scanner error",
+          # which sends you looking in the wrong repository.
+          expr: up{job=~".*sonarqube.*"} == 0
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "SonarQube has not been scrapeable for 10 minutes"
+            description: >-
+              The quality gate is part of the deploy path. While this is down, merges to
+              main in tutac/revealroll cannot produce an image.
+            runbook_url: "https://github.com/tutac/revealroll-platform/blob/main/docs/runbooks/sonarqube-down.md"
+
     # ── Is the monitoring itself alive? ──────────────────────────────────────
     - name: meta
       rules:

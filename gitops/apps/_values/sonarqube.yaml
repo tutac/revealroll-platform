@@ -1,0 +1,142 @@
+# Values for sonarqube 2026.4.1 (Argo CD Application: gitops/apps/sonarqube.yaml).
+#
+# Everything below is one of three things: "make it Community Edition", "make it fit on a
+# 4 vCPU / 8 GB node that already runs Prometheus, Loki and the app", or "let the layer
+# that owns a thing keep owning it".
+#
+# Budget check before touching any number here: the chart's DEFAULTS request 2 GB of
+# memory and, more dangerously, an ephemeral-storage LIMIT of 512000M -- half a terabyte
+# on a 100 GB disk, which makes the pod permanently unschedulable with a message that
+# does not mention storage. That is the first thing to look at if it will not schedule.
+
+# ── Edition ────────────────────────────────────────────────────────────────────
+# Community Build. Worth knowing the boundary: branch and pull-request analysis are
+# Developer Edition features, so this instance analyses ONE branch. The CI job in the app
+# repo therefore gates main, not every PR. Pretending otherwise is how you ship a quality
+# gate that silently measures nothing.
+community:
+  enabled: true
+  buildNumber: "26.7.0.124771"
+
+# ── Host prerequisites belong to Ansible, not to a privileged init container ────
+# The chart's default is an initContainer running privileged as uid 0 to set
+# vm.max_map_count on the node. That is a kernel setting on the host: by the layer rule
+# in CLAUDE.md it belongs to roles/common, where it is already set to 524288 and where
+# it is visible to anyone reading the machine's configuration. Disabling it here removes
+# the only privileged container this cluster would otherwise run.
+#
+# If Elasticsearch fails its bootstrap check on startup, Ansible has not run -- fix that,
+# do not turn this back on.
+initSysctl:
+  enabled: false
+
+# ── Database ───────────────────────────────────────────────────────────────────
+# The chart no longer bundles PostgreSQL. Ours is platform/sonarqube-db/, deployed by its
+# own Application one sync wave earlier.
+jdbcOverwrite:
+  enabled: true
+  jdbcUrl: "jdbc:postgresql://sonarqube-postgres:5432/sonarqube"
+  jdbcUsername: "sonarqube"
+  jdbcSecretName: "sonarqube"
+  jdbcSecretPasswordKey: "postgres-password"
+
+# ── Memory: the whole reason this file is opinionated ──────────────────────────
+# SonarQube runs three JVMs in one pod (web, compute engine, search). Left at their
+# defaults they ask for -Xmx1G, -Xmx2G and -Xmx2G-with-Xms2G respectively -- 5 GB of heap
+# on an 8 GB node that is already 60% spoken for. These are staging-scale numbers, and
+# they are the first thing to raise if analyses start timing out.
+#
+# The search process is Elasticsearch: Xms must equal Xmx or it will not start.
+env:
+  - name: SONAR_WEB_JAVAOPTS
+    value: "-Xmx512m -Xms128m"
+  - name: SONAR_CE_JAVAOPTS
+    value: "-Xmx512m -Xms128m"
+  - name: SONAR_SEARCH_JAVAOPTS
+    value: "-Xmx768m -Xms768m"
+
+resources:
+  requests:
+    cpu: 300m
+    memory: 2Gi
+    ephemeral-storage: 1Gi
+  limits:
+    # ~1.8 GB of heap plus JVM overhead and off-heap Lucene. Below 3Gi this OOMKills
+    # during the first full analysis rather than at startup, which is a slower thing to
+    # diagnose.
+    memory: 3Gi
+    ephemeral-storage: 4Gi
+    # Explicitly removed, matching charts/revealroll/values.yaml: CPU is compressible, so
+    # a limit buys throttling — an analysis that takes four minutes instead of one, and
+    # reads as SonarQube being slow. `null` is required: this map MERGES with the chart's
+    # defaults, so omitting the key leaves the chart's 800m in place.
+    cpu: null
+
+persistence:
+  enabled: true
+  # k3s local-path -- node-local, does not survive the node. Accepted: analysis history is
+  # rebuildable by re-scanning. See decision 014.
+  storageClass: local-path
+  accessMode: ReadWriteOnce
+  size: 5Gi
+
+# ── Readiness ──────────────────────────────────────────────────────────────────
+# Without a monitoring passcode the chart refuses to template at all, and with the wrong
+# one the pod is never Ready -- the probes call the monitoring API with it. Sealed, like
+# every other credential here.
+monitoringPasscodeSecretName: sonarqube
+monitoringPasscodeSecretKey: monitoring-passcode
+
+# First boot takes minutes on this node: schema migration, then Elasticsearch index
+# creation. The chart's default startup budget assumes faster hardware.
+startupProbe:
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  failureThreshold: 60 # 10 minutes before liveness applies
+
+# ── Scraping ───────────────────────────────────────────────────────────────────
+# The chart's own PodMonitor, which points at /api/monitoring/metrics and authenticates
+# with the same passcode above. Prometheus picks it up because
+# podMonitorSelectorNilUsesHelmValues is false in the kube-prometheus-stack values.
+#
+# prometheusExporter (the JMX javaagent) is deliberately NOT enabled: it downloads a jar
+# from Maven Central in an init container, which makes pod startup depend on a third-party
+# host being up.
+prometheusMonitoring:
+  podMonitor:
+    enabled: true
+    interval: 30s
+
+# ── Ingress ────────────────────────────────────────────────────────────────────
+# The wildcard *.stg A record already resolves this hostname; no DNS change is needed.
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hosts:
+    - name: sonarqube.stg.revealroll.com
+      path: /
+      pathType: Prefix
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Scanner reports are multi-megabyte JSON. nginx's default body limit is 1m, and the
+    # failure mode is a 413 in CI that reads like a scanner bug.
+    nginx.ingress.kubernetes.io/proxy-body-size: "32m"
+    # Analysis submission on a cold compute engine can outlast the default 60s.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+  tls:
+    - secretName: sonarqube-tls
+      hosts:
+        - sonarqube.stg.revealroll.com
+
+sonarProperties:
+  # No anonymous browsing. This host is reachable from the public internet because
+  # GitHub-hosted runners have to reach it; forced authentication and a strong admin
+  # password are the compensating controls. The stronger answer -- a self-hosted runner
+  # inside the network -- is noted in decision 014.
+  sonar.forceAuthentication: "true"
+
+# The admin password is NOT set from a values file or a hook here. The chart's
+# change-admin-password Job re-runs on every sync and fails with 401 once the password is
+# no longer `admin`, which shows up as a permanently Degraded Application. Instead:
+# SonarQube forces a password change at first login, and that password goes in the
+# password manager. Documented in docs/runbooks/sonarqube-down.md.

@@ -46,11 +46,10 @@ The moment Argo CD is up, Terraform stops adding cluster resources. Everything a
 | `charts/revealroll/` | Your own Helm chart for the app | Argo CD |
 | `gitops/` | `root-app.yaml` (app-of-apps), AppProjects, Application manifests | Argo CD |
 | `observability/` | Grafana dashboard JSON, `PrometheusRule` alerts | Argo CD |
-| `platform/` | Our own plain manifests for platform components (SonarQube's PostgreSQL) | Argo CD |
 | `secrets/staging/` | Committed **SealedSecrets** (encrypted — safe in Git) | Argo CD |
 | `scripts/` | `fetch-kubeconfig.sh`, `seal-env.sh`, `smoke.sh`, `backup-etcd.sh` | — |
 | `docs/runbooks/` | One runbook per alert. Written before the alert fires. | — |
-| `.claude/codemap.md` | "I want to change X → touch this file." First stop before grepping. | — |
+| `.Codex/codemap.md` | "I want to change X → touch this file." First stop before grepping. | — |
 
 ---
 
@@ -87,7 +86,6 @@ cd ../terraform/stacks/02-cluster-bootstrap && terraform init && terraform apply
 | `https://argocd.stg.revealroll.com` | Argo CD | admin; initial password is a Terraform output |
 | `https://grafana.stg.revealroll.com` | Grafana | admin; password from a sealed secret |
 | `https://alertmanager.stg.revealroll.com` | Alertmanager | basic-auth via ingress annotation |
-| `https://sonarqube.stg.revealroll.com` | SonarQube — code quality gate | admin; password set at first login, password manager only |
 
 DNS is a **wildcard `*.stg` A record on Namecheap** pointing at the VPS IPv4, added by hand.
 Terraform does not manage DNS. If a hostname doesn't resolve, check Namecheap before you debug ingress.
@@ -144,11 +142,11 @@ CI (`.github/workflows/validate.yml`) runs exactly these. Running them locally f
   and `rollout restart` to recycle pods.
 - **Every alert has a `runbook_url` annotation** pointing at a file in `docs/runbooks/`. An alert
   without a runbook is a page with no instructions — write the runbook first, then the alert.
-- **Every incident goes in `.claude/memory/incidents.md`**: what you saw, when you detected it, root
+- **Every incident goes in `.Codex/memory/incidents.md`**: what you saw, when you detected it, root
   cause, fix, and what would have detected it sooner. This file is the actual product of the project.
-- **Architecture decisions go in `.claude/memory/decisions.md`** — why k3s over kubeadm, why
+- **Architecture decisions go in `.Codex/memory/decisions.md`** — why k3s over kubeadm, why
   sealed-secrets over ESO, why nginx over Traefik. You will be asked these in interviews.
-- Keep `.claude/codemap.md` accurate. If you move or rename something listed there, fix the row in
+- Keep `.Codex/codemap.md` accurate. If you move or rename something listed there, fix the row in
   the same commit.
 
 ---

@@ -1,0 +1,444 @@
+<title>SonarQube Wiring</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@0,400;0,600&display=swap">
+<style>
+:root{
+  --ground:#EEF0F4;--surface:#fff;--surface-2:#F6F7FA;--sunk:#E7EAF0;
+  --ink:#15181E;--ink-2:#49505D;--ink-3:#737C8B;--line:#D7DCE4;--line-strong:#B9C1CD;
+  --sq:#4E9BCD;--gh:#24292F;--pg:#31648C;--argo:#C96A22;--ans:#B33A28;--tf:#6B4CE6;
+  --ok:#2C7A52;--stop:#B33A28;
+  --shadow:0 1px 2px rgba(21,24,30,.06),0 8px 24px -16px rgba(21,24,30,.28);
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+  --serif:"IBM Plex Serif",Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0F1217;--surface:#171B21;--surface-2:#1D222A;--sunk:#12161B;
+  --ink:#E7EAEE;--ink-2:#A9B2BF;--ink-3:#798393;--line:#282E38;--line-strong:#3A424F;
+  --sq:#6FB6E4;--gh:#C9D1D9;--pg:#7EAFD4;--argo:#EBA45F;--ans:#F0705C;--tf:#A490FF;
+  --ok:#5FBF8B;--stop:#F0705C;--shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.8);
+}}
+:root[data-theme="dark"]{
+  --ground:#0F1217;--surface:#171B21;--surface-2:#1D222A;--sunk:#12161B;
+  --ink:#E7EAEE;--ink-2:#A9B2BF;--ink-3:#798393;--line:#282E38;--line-strong:#3A424F;
+  --sq:#6FB6E4;--gh:#C9D1D9;--pg:#7EAFD4;--argo:#EBA45F;--ans:#F0705C;--tf:#A490FF;
+  --ok:#5FBF8B;--stop:#F0705C;--shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--serif);font-size:16px;line-height:1.6;margin:0;padding:0 20px 80px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1060px;margin:0 auto}
+h1,h2,h3,.ui{font-family:var(--sans)}
+h1{font-size:clamp(28px,4.2vw,42px);font-weight:600;letter-spacing:-.022em;line-height:1.1;margin:.1em 0 .3em;text-wrap:balance}
+h2{font-size:clamp(20px,2.5vw,26px);font-weight:600;letter-spacing:-.014em;margin:0 0 .3em;text-wrap:balance}
+p{margin:0 0 1em}
+code{font-family:var(--mono);font-size:.85em;background:var(--sunk);border:1px solid var(--line);border-radius:3px;padding:.08em .34em}
+.mono{font-family:var(--mono)}
+.eyebrow{font-family:var(--mono);font-size:11.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+header{padding:52px 0 34px;border-bottom:2px solid var(--ink)}
+.stand{font-size:19px;line-height:1.55;color:var(--ink-2);max-width:62ch;margin:0}
+section{padding:46px 0;border-bottom:1px solid var(--line)}
+section:last-of-type{border-bottom:0}
+.sec-head{margin-bottom:26px}
+.lede{color:var(--ink-2);max-width:66ch;margin:6px 0 0}
+.scroller{overflow-x:auto;padding-bottom:4px}
+.scroller>*{min-width:680px}
+
+/* logo badge */
+.lg{width:30px;height:30px;flex:0 0 30px;border-radius:6px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--c) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--c) 35%,var(--line))}
+.lg svg{display:block}
+
+/* flow chain */
+.flow{display:flex;flex-direction:column;gap:0}
+.fr{display:flex;align-items:stretch}
+.fbox{flex:1;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--c,var(--line-strong));padding:12px 13px;display:flex;flex-direction:column;gap:7px;box-shadow:var(--shadow)}
+.fhead{display:flex;align-items:center;gap:9px}
+.fhead b{font-family:var(--sans);font-size:13.5px;font-weight:600;line-height:1.2}
+.fbox p{margin:0;font-family:var(--mono);font-size:11.5px;line-height:1.55;color:var(--ink-3)}
+.fsep{display:flex;align-items:center;padding:0 8px;color:var(--ink-3);font-family:var(--mono);font-size:16px}
+.gate{border-top-color:var(--sq)}
+.vsep{padding:7px 0 7px 4px;font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+.branch{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:4px}
+.outcome{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--c);padding:13px 15px}
+.outcome b{display:block;font-family:var(--sans);font-size:13.5px;font-weight:600;color:var(--c);margin-bottom:4px}
+.outcome span{font-family:var(--mono);font-size:11.5px;line-height:1.6;color:var(--ink-2)}
+
+/* pod anatomy */
+.podwrap{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.box{background:var(--surface);border:1px solid var(--line-strong);box-shadow:var(--shadow)}
+.box-bar{display:flex;align-items:center;gap:9px;padding:10px 13px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.box-bar b{font-family:var(--mono);font-size:12.5px;font-weight:600}
+.box-bar span{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);letter-spacing:.06em;text-transform:uppercase}
+.box-body{padding:12px 13px;display:flex;flex-direction:column;gap:9px}
+.proc{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:baseline;padding:8px 10px;background:var(--surface-2);border:1px solid var(--line)}
+.proc b{font-family:var(--sans);font-size:12.5px;font-weight:600}
+.proc .m{font-family:var(--mono);font-size:11px;color:var(--sq);font-weight:500;white-space:nowrap}
+.proc span{grid-column:1/-1;font-family:var(--mono);font-size:11px;color:var(--ink-3);line-height:1.5}
+.wire{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--ink-2);padding:6px 0}
+.wire i{font-style:normal;color:var(--ink-3)}
+
+/* tables */
+table{border-collapse:collapse;width:100%;font-family:var(--sans);font-size:13.5px}
+th{text-align:left;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:0 14px 8px 0;border-bottom:1px solid var(--line-strong)}
+td{padding:9px 14px 9px 0;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+td:first-child{color:var(--ink);font-weight:500;font-family:var(--mono);font-size:12px}
+tr:last-child td{border-bottom:0}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;padding:1px 6px;border:1px solid currentColor;border-radius:2px;white-space:nowrap}
+.new{color:var(--ok)}.mod{color:var(--tf)}
+
+/* steps */
+.steps{display:flex;flex-direction:column;gap:14px}
+.step{display:grid;grid-template-columns:34px 1fr;gap:14px;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--c,var(--line-strong));padding:15px 18px;box-shadow:var(--shadow)}
+.step .n{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--c,var(--ink-3));line-height:1.3}
+.step h3{margin:0 0 5px;font-size:15.5px;font-weight:600}
+.step p{margin:0 0 8px;font-size:14.5px;color:var(--ink-2);max-width:66ch}
+.step p:last-child{margin-bottom:0}
+pre{margin:8px 0 0;padding:11px 13px;background:var(--sunk);border:1px solid var(--line);overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.65;color:var(--ink)}
+.note{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);line-height:1.6;margin-top:8px}
+.who{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--c);border:1px solid currentColor;padding:1px 6px;border-radius:2px;margin-bottom:7px}
+@media(max-width:760px){.podwrap,.branch{grid-template-columns:1fr}}
+@media print{body{background:#fff;padding:0}.box,.step,.fbox{box-shadow:none;break-inside:avoid}.scroller>*{min-width:0}}
+
+/* prerequisites */
+.pre-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);margin-bottom:22px}
+.pre{background:var(--surface);padding:13px 14px;display:flex;flex-direction:column;gap:5px}
+.pre b{font-family:var(--sans);font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px}
+.pre .chk{font-family:var(--mono);font-size:11px;color:var(--ink-3);line-height:1.55;word-break:break-word}
+.pre .st{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ok);border:1px solid currentColor;padding:0 5px;border-radius:2px;margin-left:auto;flex:0 0 auto}
+.terms{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:26px}
+.term{background:var(--sunk);border:1px solid var(--line-strong);padding:0}
+.term-bar{display:flex;align-items:center;gap:6px;padding:7px 11px;border-bottom:1px solid var(--line);background:var(--surface-2);font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--c)}
+.term pre{margin:0;border:0;background:transparent}
+@media(max-width:760px){.terms{grid-template-columns:1fr}}
+:focus-visible{outline:2px solid var(--sq);outline-offset:2px}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">revealroll-platform · decision 014</div>
+  <h1>SonarQube Wiring</h1>
+  <p class="stand">SonarQube reads your code and refuses to let it become a container image if it fails
+    the quality gate. It runs in your own cluster, next to Grafana and Loki — one more thing Argo CD
+    deploys from Git, plus one host setting that belongs to Ansible.</p>
+</header>
+
+<!-- ═══ FLOW ═══ -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">What happens on a push</span>
+    <h2>Where the gate sits</h2>
+    <p class="lede">The gate is placed <em>before</em> the image build, not after. That is the whole design:
+      code that fails cannot become an image, so it cannot become a tag bump, so it can never reach the cluster.</p>
+  </div>
+
+  <div class="scroller">
+  <div class="flow">
+    <div class="fr">
+      <div class="fbox" style="--c:var(--gh)">
+        <div class="fhead">
+          <span class="lg" style="--c:var(--gh)"><svg width="17" height="17" viewBox="0 0 24 24" fill="var(--gh)"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.1.1 1.7 1.2 1.7 1.2 1 1.8 2.7 1.3 3.4 1 .1-.7.4-1.3.7-1.5-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11 11 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.5-2.7 5.5-5.3 5.8.4.4.8 1.1.8 2.2v3.3c0 .4.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg></span>
+          <b>Push to main</b>
+        </div>
+        <p>tutac/revealroll<br>GitHub Actions starts</p>
+      </div>
+      <div class="fsep">→</div>
+      <div class="fbox" style="--c:var(--gh)">
+        <div class="fhead">
+          <span class="lg" style="--c:var(--gh)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--gh)" stroke-width="2"><path d="M4 12l5 5L20 6"/></svg></span>
+          <b>Existing gates</b>
+        </div>
+        <p>typecheck · schema<br>Playwright</p>
+      </div>
+      <div class="fsep">→</div>
+      <div class="fbox gate" style="--c:var(--sq)">
+        <div class="fhead">
+          <span class="lg" style="--c:var(--sq)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--sq)" stroke-width="2" stroke-linecap="round"><path d="M4 20A16 16 0 0 1 20 4"/><path d="M4 14A10 10 0 0 1 14 4"/><path d="M4 8A4 4 0 0 1 8 4"/></svg></span>
+          <b>Scanner runs</b>
+        </div>
+        <p>uploads analysis over HTTPS to<br>sonarqube.stg.revealroll.com<br>then polls the quality gate</p>
+      </div>
+    </div>
+
+    <div class="vsep">↓ &nbsp; the gate answers, and the answer decides everything downstream</div>
+
+    <div class="branch">
+      <div class="outcome" style="--c:var(--stop)">
+        <b>✕ Gate fails</b>
+        <span>the <span class="mono">sonar</span> job exits non-zero<br>
+        → <span class="mono">docker</span> never runs (it <span class="mono">needs: sonar</span>)<br>
+        → no image, no tag bump, no deploy<br>
+        <b style="font-weight:400;color:var(--ink-3);display:inline">staging keeps running the previous image</b></span>
+      </div>
+      <div class="outcome" style="--c:var(--ok)">
+        <b>✓ Gate passes</b>
+        <span>build → <span class="mono">ghcr.io/…:sha-abc1234</span><br>
+        → one-line tag bump committed to this repo<br>
+        → Argo CD pulls within 3 minutes<br>
+        → rolling update, new pod Ready first</span>
+      </div>
+    </div>
+  </div>
+  </div>
+</section>
+
+<!-- ═══ ANATOMY ═══ -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Inside the cluster</span>
+    <h2>What SonarQube actually is</h2>
+    <p class="lede">One pod running three Java processes, one database, one disk. The memory numbers below are
+      why this file is opinionated — the chart's defaults ask for about 5 GB of heap on an 8 GB node that is
+      already running Prometheus, Loki and your app.</p>
+  </div>
+
+  <div class="podwrap">
+    <div class="box">
+      <div class="box-bar">
+        <span class="lg" style="--c:var(--sq)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--sq)" stroke-width="2" stroke-linecap="round"><path d="M4 20A16 16 0 0 1 20 4"/><path d="M4 14A10 10 0 0 1 14 4"/><path d="M4 8A4 4 0 0 1 8 4"/></svg></span>
+        <b>sonarqube-0</b><span>StatefulSet · ns sonarqube</span>
+      </div>
+      <div class="box-body">
+        <div class="proc"><b>Web</b><span class="m">-Xmx512m</span><span>the UI and the REST API the scanner talks to</span></div>
+        <div class="proc"><b>Compute Engine</b><span class="m">-Xmx512m</span><span>processes each submitted report, computes the gate</span></div>
+        <div class="proc"><b>Search (Elasticsearch)</b><span class="m">-Xmx768m</span><span>needs <span style="color:var(--ans)">vm.max_map_count</span> on the host or it will not boot</span></div>
+        <div class="wire"><i>PVC</i> 5Gi local-path — node-local, rebuildable</div>
+        <div class="wire"><i>limit</i> 3Gi memory, no CPU limit</div>
+      </div>
+    </div>
+
+    <div class="box">
+      <div class="box-bar">
+        <span class="lg" style="--c:var(--pg)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--pg)" stroke-width="2"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg></span>
+        <b>sonarqube-postgres-0</b><span>StatefulSet</span>
+      </div>
+      <div class="box-body">
+        <div class="proc"><b>postgres:17.6-alpine</b><span class="m">512Mi</span><span>the chart stopped shipping a database, so this is ours — plain manifests, no chart</span></div>
+        <div class="wire"><i>PVC</i> 5Gi local-path</div>
+        <div class="wire"><i>password</i> from the sealed Secret, shared with SonarQube's JDBC config</div>
+        <div style="height:1px;background:var(--line);margin:4px 0"></div>
+        <div class="wire"><i>in ←</i> Ingress · TLS from cert-manager</div>
+        <div class="wire"><i>out →</i> PodMonitor scraped by Prometheus</div>
+        <div class="wire"><i>alert</i> <span class="mono" style="color:var(--sq)">SonarQubeUnavailable</span> → its runbook</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="box" style="margin-top:16px;border-left:3px solid var(--ans)">
+    <div class="box-body" style="gap:6px">
+      <div class="fhead"><span class="lg" style="--c:var(--ans)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ans)" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7.5 14.5 12 7"/></svg></span><b style="font-family:var(--sans);font-size:13.5px">The one piece that is not Kubernetes</b></div>
+      <p style="margin:4px 0 0;font-size:14.5px;color:var(--ink-2);max-width:70ch">Elasticsearch will not start unless the
+        <em>host</em> kernel allows enough memory-mapped areas. The chart's answer is a privileged container that
+        edits the node. Ours is a line in the Ansible role that already owns the operating system — so this cluster
+        runs <b>no privileged container at all</b>, and the requirement is visible to anyone reading the machine's config.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FILES ═══ -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">The diff</span>
+    <h2>What changed, and which layer owns it</h2>
+  </div>
+  <div class="scroller">
+  <table>
+    <thead><tr><th style="width:32%">File</th><th style="width:11%"></th><th>Why it exists</th></tr></thead>
+    <tbody>
+      <tr><td>ansible/roles/common/defaults/main.yml</td><td><span class="tag mod">edited</span></td><td>New <code>common_sysctl_settings</code> map — <code>vm.max_map_count</code> and <code>fs.file-max</code>.</td></tr>
+      <tr><td>ansible/roles/common/tasks/main.yml</td><td><span class="tag mod">edited</span></td><td>Applies them to <code>/etc/sysctl.d/99-ansible.conf</code>. Its own drop-in, so a distro upgrade can't quietly drop it.</td></tr>
+      <tr><td>platform/sonarqube-db/postgres.yaml</td><td><span class="tag new">new</span></td><td>The database. StatefulSet + headless Service on the official image — no Bitnami chart to be withdrawn under you.</td></tr>
+      <tr><td>gitops/apps/_values/sonarqube.yaml</td><td><span class="tag new">new</span></td><td>The opinionated half: Community edition, JVM heaps, memory caps, ingress, and the chart's privileged init container turned off.</td></tr>
+      <tr><td>gitops/apps/sonarqube.yaml</td><td><span class="tag new">new</span></td><td>The Argo CD Application. Upstream chart pinned to <code>2026.4.1</code> + this repo's values, same two-source pattern as your monitoring stack.</td></tr>
+      <tr><td>gitops/apps/sonarqube-db.yaml</td><td><span class="tag new">new</span></td><td>Deploys the database one sync wave earlier (<code>-1</code>).</td></tr>
+      <tr><td>gitops/apps/sonarqube-secrets.yaml</td><td><span class="tag new">new</span></td><td>Deploys the sealed credentials two waves earlier (<code>-2</code>) — both pods read them at startup.</td></tr>
+      <tr><td>gitops/projects/platform.yaml</td><td><span class="tag mod">edited</span></td><td>Two lines that are easy to forget: allow the SonarSource chart repo, allow the <code>sonarqube</code> namespace. Missing either reads like a network error and is not one.</td></tr>
+      <tr><td>scripts/seal-sonarqube.sh</td><td><span class="tag new">new</span></td><td>Generates and seals the DB password and monitoring passcode. Plaintext never touches disk.</td></tr>
+      <tr><td>observability/alerts/platform.yaml</td><td><span class="tag mod">edited</span></td><td>Adds <code>SonarQubeUnavailable</code> — because when this is down, deploys stop and the CI error points at the wrong repo.</td></tr>
+      <tr><td>docs/runbooks/sonarqube-down.md</td><td><span class="tag new">new</span></td><td>Written before the alert, as always. Four real failure modes, OOMKill first.</td></tr>
+      <tr><td>docs/sonarqube.md</td><td><span class="tag new">new</span></td><td>Operator doc: install order, first login, and the CI snippet for the app repo.</td></tr>
+      <tr><td>.claude/memory/decisions.md</td><td><span class="tag mod">edited</span></td><td>ADR 014 — self-hosted vs SonarCloud, and everything traded away.</td></tr>
+      <tr><td>.claude/codemap.md · CLAUDE.md</td><td><span class="tag mod">edited</span></td><td>New rows so the map stays true: URL, new <code>platform/</code> directory, where each knob lives.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note">Nothing is committed or pushed. All of it passes the repo's own gates — <span class="mono">helm template | kubeconform</span>, <span class="mono">ansible-lint</span>, <span class="mono">gitleaks</span>, <span class="mono">terraform fmt</span>.</p>
+</section>
+
+<!-- ═══ MANUAL ═══ -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Your turn</span>
+    <h2>Prerequisites, then seven steps</h2>
+    <p class="lede">Steps 1–3 are on your laptop, 4–5 in the browser, 6–7 in the application repo. Nothing here
+      is reorderable; each one consumes the previous. But first — none of it works without these five things,
+      and the second terminal is the one people forget.</p>
+  </div>
+
+  <div class="pre-grid">
+    <div class="pre">
+      <b>Environment loaded <span class="st">ready</span></b>
+      <span class="chk">direnv allow<br>→ exports KUBECONFIG, CNTB_*, AWS_* for R2</span>
+    </div>
+    <div class="pre">
+      <b>SSH key in the agent <span class="st">ready</span></b>
+      <span class="chk">make ansible-ping<br>→ staging-1 | SUCCESS … "ping": "pong"</span>
+    </div>
+    <div class="pre">
+      <b>Ansible collections <span class="st">ready</span></b>
+      <span class="chk">cd ansible &amp;&amp; ansible-galaxy collection install -r requirements.yml<br>→ the new sysctl task needs ansible.posix</span>
+    </div>
+    <div class="pre">
+      <b>Kubeconfig on disk <span class="st">ready</span></b>
+      <span class="chk">make kubeconfig<br>→ ~/.kube/revealroll-staging.yaml</span>
+    </div>
+    <div class="pre">
+      <b>kubeseal installed <span class="st">ready</span></b>
+      <span class="chk">brew install kubeseal helm kubectl</span>
+    </div>
+  </div>
+
+  <div class="terms">
+    <div class="term">
+      <div class="term-bar"><span class="dot" style="--c:var(--argo)"></span> terminal A — leave this open</div>
+      <pre>$ make tunnel
+→ 127.0.0.1:6443 → &lt;node&gt;:6443
+  (ctrl-c to close)</pre>
+    </div>
+    <div class="term">
+      <div class="term-bar"><span class="dot" style="--c:var(--ok)"></span> terminal B — do the work here</div>
+      <pre>$ make nodes
+NAME        STATUS   ROLES
+staging-1   Ready    control-plane</pre>
+    </div>
+  </div>
+
+  <p class="note" style="margin:-8px 0 26px">Port 6443 is firewalled shut from the internet on purpose (decision 011).
+    Every <span class="mono">kubectl</span>, <span class="mono">kubeseal</span> and <span class="mono">helm</span>
+    command below fails with <span class="mono">connection refused</span> until that tunnel is up. Ansible does
+    <b>not</b> need it — it talks over plain SSH on port 22.</p>
+
+  <div class="steps">
+
+    <div class="step" style="--c:var(--ans)">
+      <div class="n">1</div>
+      <div>
+        <span class="who" style="--c:var(--ans)">laptop · ansible</span>
+        <h3>Set the host kernel value</h3>
+        <p>Do this <b>before</b> anything syncs. Without it, Elasticsearch fails its startup check and the pod
+          crash-loops with a message about virtual memory that does not mention Kubernetes.</p>
+        <pre>cd ansible
+ansible-playbook -i inventory/staging.yml site.yml
+ssh deploy@&lt;node-ip&gt; sysctl vm.max_map_count   # expect 524288</pre>
+      </div>
+    </div>
+
+    <div class="step" style="--c:var(--tf)">
+      <div class="n">2</div>
+      <div>
+        <span class="who" style="--c:var(--tf)">laptop · kubeseal</span>
+        <h3>Seal the two credentials</h3>
+        <p>Needs your SSH tunnel to the cluster open, because <code>kubeseal</code> fetches the controller's public key.
+          The script prints both values once — put them in your password manager before you close the terminal.</p>
+        <pre>make tunnel            # in another terminal, if it isn't up
+./scripts/seal-sonarqube.sh</pre>
+        <p class="note">Writes <span class="mono">secrets/sonarqube/sonarqube-sealed.yaml</span> — encrypted, safe to commit.</p>
+      </div>
+    </div>
+
+    <div class="step" style="--c:var(--argo)">
+      <div class="n">3</div>
+      <div>
+        <span class="who" style="--c:var(--argo)">laptop · git</span>
+        <h3>Commit and push — that is the deploy</h3>
+        <p>Argo CD syncs three Applications in wave order: secrets, then the database, then SonarQube.
+          First boot runs a schema migration and builds search indexes, so give it five to ten minutes.
+          One failed retry in that window is expected and already accounted for in the Application's retry policy.</p>
+        <pre>git add . &amp;&amp; git commit -m "feat(quality): self-hosted SonarQube behind the image build"
+git push</pre>
+        <p class="note">Watch it: <span class="mono">kubectl -n sonarqube get pods -w</span></p>
+      </div>
+    </div>
+
+    <div class="step" style="--c:var(--sq)">
+      <div class="n">4</div>
+      <div>
+        <span class="who" style="--c:var(--sq)">browser</span>
+        <h3>First login, and set the admin password</h3>
+        <p>Open <b>https://sonarqube.stg.revealroll.com</b> and sign in with <code>admin</code> / <code>admin</code>.
+          It forces a change immediately. <b>Save the new password in your password manager</b> — deliberately,
+          nothing in the repo can recover it, because the chart's password-setting job would otherwise fail on
+          every single sync and leave the Application permanently red.</p>
+      </div>
+    </div>
+
+    <div class="step" style="--c:var(--sq)">
+      <div class="n">5</div>
+      <div>
+        <span class="who" style="--c:var(--sq)">browser</span>
+        <h3>Generate the scanner token</h3>
+        <p>Administration → Security → Users → your account → Tokens → <b>Global Analysis Token</b>. Copy it once.</p>
+        <p class="note">This is a CI credential, so it goes to GitHub — not into a SealedSecret here. Cluster credentials
+          are sealed into this repo; CI credentials live in CI. The directions are opposite on purpose.</p>
+      </div>
+    </div>
+
+    <div class="step" style="--c:var(--gh)">
+      <div class="n">6</div>
+      <div>
+        <span class="who" style="--c:var(--gh)">tutac/revealroll</span>
+        <h3>Wire the gate into the app repo</h3>
+        <p>Add the token as a repository <b>secret</b> <code>SONAR_TOKEN</code> and the URL as a repository
+          <b>variable</b> <code>SONAR_HOST_URL</code>. Then two files — the full snippets are in
+          <code>docs/sonarqube.md</code>:</p>
+        <pre>sonar-project.properties     # project key, sources, coverage path
+.github/workflows/ci.yml     # a `sonar` job … and then the line that matters:
+
+  docker:
+    needs: [static, ui, sonar]   # was [static, ui]</pre>
+        <p class="note">Without that last change you have a report nobody is obliged to read. With it, you have a gate.</p>
+      </div>
+    </div>
+
+    <div class="step" style="--c:var(--ok)">
+      <div class="n">7</div>
+      <div>
+        <span class="who" style="--c:var(--ok)">verify</span>
+        <h3>Prove it blocks</h3>
+        <p>Push a branch with a deliberate code smell — an unused variable, a hardcoded string repeated four times.
+          Watch the <code>sonar</code> job fail and, more importantly, watch <code>docker</code> never start.
+          Then remove it and watch a pod actually roll.</p>
+        <p class="note">A gate you have never seen refuse anything is not yet a gate.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══ CAVEAT ═══ -->
+<section>
+  <div class="sec-head">
+    <span class="eyebrow">Know this before someone asks</span>
+    <h2>Two honest limits</h2>
+  </div>
+  <div class="podwrap">
+    <div class="box" style="border-left:3px solid var(--sq)">
+      <div class="box-body">
+        <div class="fhead"><b style="font-family:var(--sans);font-size:14px">Community Build reads one branch</b></div>
+        <p style="margin:6px 0 0;font-size:14.5px;color:var(--ink-2)">Pull-request decoration and per-branch analysis are
+          Developer Edition features. So this gate protects <code>main</code>; it does not annotate individual PRs.
+          Knowing the licensing boundary of your own tooling reads as senior. Claiming PR decoration works here
+          reads as the opposite.</p>
+      </div>
+    </div>
+    <div class="box" style="border-left:3px solid var(--stop)">
+      <div class="box-body">
+        <div class="fhead"><b style="font-family:var(--sans);font-size:14px">It is reachable from the internet</b></div>
+        <p style="margin:6px 0 0;font-size:14.5px;color:var(--ink-2)">GitHub-hosted runners have to reach it, and
+          allowlisting GitHub's runner IP ranges is not practical. Compensating controls: forced authentication and a
+          strong admin password. The answer that actually removes the exposure — and the one a regulated or federal
+          environment would require — is a self-hosted runner inside the network.</p>
+      </div>
+    </div>
+  </div>
+</section>
+</div>

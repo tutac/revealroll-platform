@@ -17,3 +17,17 @@ common_packages:
 common_journald_settings:
   SystemMaxUse: 500M
   SystemMaxFileSize: 50M
+
+# Kernel settings this host needs for the workloads it runs. Elasticsearch -- embedded in
+# SonarQube -- refuses to start below 262144 mmap areas and fails its bootstrap check
+# with a message about vm.max_map_count. 524288 is what the SonarQube chart's own
+# privileged initContainer would set; setting it here instead means the cluster runs no
+# privileged container at all, and the requirement is visible to anyone reading the
+# machine's configuration rather than buried in a Helm values file.
+#
+# If you add a workload that needs a sysctl, it goes here. It is a kernel setting on the
+# host, so by the layer rule it is Ansible's, never Helm's.
+common_sysctl_settings:
+  vm.max_map_count: 524288
+  # Same reason: the search process opens far more file descriptors than the default.
+  fs.file-max: 131072

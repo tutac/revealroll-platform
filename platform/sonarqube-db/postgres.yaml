@@ -1,0 +1,115 @@
+---
+# PostgreSQL for SonarQube. Plain manifests, not a chart.
+#
+# The SonarQube chart stopped bundling a PostgreSQL sub-chart -- it now requires an
+# external database via jdbcOverwrite. The obvious replacement is the Bitnami chart, but
+# Bitnami moved its public catalogue to `bitnamilegacy` images in 2025 and a Helm release
+# whose image can disappear is not a dependency worth taking for one internal consumer.
+#
+# So: one StatefulSet, one Service, the official postgres image, ~70 lines. Same reasoning
+# as observability/ -- these are our own objects and a chart would add templating nobody
+# needs.
+apiVersion: v1
+kind: Service
+metadata:
+  name: sonarqube-postgres
+  namespace: sonarqube
+  labels:
+    app.kubernetes.io/name: sonarqube-postgres
+spec:
+  # Headless: the StatefulSet's governing Service. SonarQube connects by this name, and
+  # with one replica the DNS answer is the pod either way.
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: sonarqube-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: sonarqube-postgres
+  namespace: sonarqube
+  labels:
+    app.kubernetes.io/name: sonarqube-postgres
+spec:
+  serviceName: sonarqube-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sonarqube-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sonarqube-postgres
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        # The official image's postgres user. fsGroup so the local-path PVC is writable.
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          # Pinned to a patch version for the same reason image tags are pinned
+          # everywhere else here: an unpinned database is a database that can change
+          # under you on a Tuesday.
+          image: postgres:17.6-alpine
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: sonarqube
+            - name: POSTGRES_USER
+              value: sonarqube
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sonarqube
+                  key: postgres-password
+            # The PVC mounts at /var/lib/postgresql/data; initdb refuses to run in a
+            # directory it does not own outright, and local-path hands us the mount
+            # point itself. A subdirectory sidesteps it.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: [pg_isready, -U, sonarqube, -d, sonarqube]
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: [pg_isready, -U, sonarqube, -d, sonarqube]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        # local-path is node-local: this PVC does not survive the node. Acceptable --
+        # SonarQube history is rebuildable by re-scanning. See decision 014.
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 5Gi

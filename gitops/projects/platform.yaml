@@ -13,6 +13,7 @@ spec:
     # network problem and is not one.
     - https://prometheus-community.github.io/helm-charts
     - https://grafana.github.io/helm-charts
+    - https://SonarSource.github.io/helm-chart-sonarqube
 
   destinations:
     - server: https://kubernetes.default.svc
@@ -21,6 +22,8 @@ spec:
       namespace: monitoring
     - server: https://kubernetes.default.svc
       namespace: logging
+    - server: https://kubernetes.default.svc
+      namespace: sonarqube
     # kube-system is present ONLY because node-level agents (Alloy, node-exporter)
     # legitimately land there. It is not a blanket grant: nothing else in this repo
     # targets it.

@@ -64,3 +64,18 @@
     enabled: true
     state: started
   become: true
+
+- name: Apply kernel settings required by the workloads
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    # Its own drop-in, not /etc/sysctl.conf: a distribution upgrade rewrites sysctl.conf
+    # and silently takes the setting with it.
+    sysctl_file: /etc/sysctl.d/99-ansible.conf
+    sysctl_set: true
+    state: present
+    reload: true
+  loop: "{{ common_sysctl_settings | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}={{ item.value }}"
+  become: true

@@ -1,0 +1,42 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sonarqube
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  # Same two-source pattern as kube-prometheus-stack: the upstream chart plus this repo's
+  # values file, addressable as $values because the second source is `ref` only.
+  sources:
+    - repoURL: https://SonarSource.github.io/helm-chart-sonarqube
+      chart: sonarqube
+      # Pinned. The chart version and the SonarQube version are the same string in this
+      # chart, so this line is also the answer to "which SonarQube is running?".
+      targetRevision: 2026.4.1
+      helm:
+        valueFiles:
+          - $values/gitops/apps/_values/sonarqube.yaml
+    - repoURL: https://github.com/tutac/revealroll-platform.git
+      targetRevision: main
+      ref: values
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sonarqube
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      # First boot runs a schema migration and an Elasticsearch bootstrap. On a node this
+      # size that can exceed the initial readiness budget once and pass on the retry.
+      limit: 5
+      backoff: { duration: 20s, factor: 2, maxDuration: 5m }
+
+  revisionHistoryLimit: 10

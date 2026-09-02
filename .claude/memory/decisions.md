@@ -421,6 +421,62 @@ first sync and owns them from then on. The manual apply is a one-time seed, not 
 
 ---
 
+## 014 — Code quality gate: self-hosted SonarQube, not SonarCloud
+
+**Date:** 2026-09-02
+**Status:** accepted
+
+**Context:** The pipeline had gates for types, tests, manifests and secrets, but nothing
+looking at the code itself. Adding one is straightforward; where it runs is the decision.
+
+**Decision:** SonarQube Community Build, self-hosted in this cluster via Argo CD, with its
+own PostgreSQL as plain manifests, gating the image build in `tutac/revealroll`.
+
+**Alternatives considered:**
+- *SonarCloud* — zero infrastructure, free for public repos, working in an afternoon. It
+  is the correct answer for a team that wants the gate and not the operational exercise.
+  Rejected because this environment exists to *be operated*: SonarQube is the first
+  component here that is stateful, memory-hungry and on the deploy path at once, which
+  makes it the most instructive thing in the repository to run.
+- *The Bitnami PostgreSQL chart* — Bitnami moved its public catalogue to `bitnamilegacy`
+  images during 2025. A Helm release whose image can be withdrawn is not a dependency
+  worth taking for one internal consumer. One StatefulSet using the official image is
+  ~70 lines and cannot be taken away.
+- *Developer Edition* — would give pull-request decoration. Not free, and the gate on
+  `main` is the part that actually blocks a bad deploy.
+
+**Consequences:**
+- **Community Build analyses one branch.** The gate protects `main`; individual pull
+  requests are not annotated. Known limitation, not a misconfiguration.
+- **Memory is the real risk.** Three JVMs in one pod on a node that already runs
+  Prometheus, Loki and the app. Heaps are pinned in the values file well below the
+  chart's defaults (512m web, 512m CE, 768m search against defaults of 1G/2G/2G) and the
+  pod is capped at 3Gi. The chart's default ephemeral-storage *limit* of 512000M would
+  also make the pod unschedulable on a 100 GB disk; it is overridden. If the node starts
+  evicting pods, the rollback is deleting the Application and reverting these commits —
+  SonarQube is the component this cluster can most afford to lose.
+- **The host sysctl went to Ansible, not to the chart.** The chart's default is a
+  privileged init container running as uid 0 to set `vm.max_map_count`. Setting it in
+  `roles/common` instead keeps the layer rule intact and means this cluster runs no
+  privileged container at all. The cost is a real ordering dependency: the Ansible run
+  must happen before the first sync, or Elasticsearch fails its bootstrap check.
+- **The instance is publicly reachable**, because GitHub-hosted runners must reach it.
+  Forced authentication and a strong admin password are the compensating controls; a
+  self-hosted runner inside the network is the answer that would remove the exposure, and
+  is what a regulated environment would require.
+- **Its PVCs are node-local.** A lost node loses analysis history, which is rebuildable by
+  re-scanning. Accepted rather than adding a `pg_dump` job to the etcd backup path — worth
+  revisiting if the instance ever holds anything that is not reproducible from source.
+- **The admin password is deliberately not in Git.** The chart's password-setting Job
+  re-runs on every sync and fails 401 once the password has changed, leaving the
+  Application permanently Degraded. It is set at first login and kept in the password
+  manager, which means it is also the one credential here that a cluster rebuild cannot
+  restore.
+
+
+
+---
+
 ## Template for new entries
 
 ```markdown

@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: sonarqube-db
+  namespace: argocd
+  annotations:
+    # Wave -1: SonarQube's first boot runs its schema migration against this database.
+    # It retries, so a late database is survivable -- but a pod that spends five minutes
+    # crash-looping on connection refused is five minutes of misleading red.
+    argocd.argoproj.io/sync-wave: "-1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  source:
+    repoURL: https://github.com/tutac/revealroll-platform.git
+    targetRevision: main
+    path: platform/sonarqube-db
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: sonarqube
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+  # A StatefulSet's volumeClaimTemplates are immutable. Argo will report OutOfSync
+  # forever if the size is ever edited -- the fix is to resize the PVC and the template
+  # together, not to add an ignoreDifferences here.
+  revisionHistoryLimit: 10

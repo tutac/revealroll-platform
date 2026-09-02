@@ -87,12 +87,39 @@ persistence:
 monitoringPasscodeSecretName: sonarqube
 monitoringPasscodeSecretKey: monitoring-passcode
 
-# First boot takes minutes on this node: schema migration, then Elasticsearch index
-# creation. The chart's default startup budget assumes faster hardware.
+# The chart's probe defaults assume faster hardware than this node. Two separate
+# problems, both fixed here:
+#
+# 1. TIME TO BOOT. Schema migration then Elasticsearch index creation takes minutes on
+#    4 vCPU, so the startup budget is widened to 10 minutes.
+# 2. TIME TO ANSWER. Every probe defaults to timeoutSeconds: 1 -- and the chart
+#    interpolates that same number into the liveness curl as `--max-time 1`. One second
+#    is not a realistic budget for the web JVM to answer while the compute engine and
+#    Elasticsearch are competing for the same four cores. The symptom is probes that
+#    "time out after 1s" on a process that is running perfectly well, and a pod that
+#    restarts itself into a loop it was never actually failing.
+#
+# Raise these before concluding SonarQube is broken; a probe timeout is a statement about
+# the probe's patience, not about the process.
 startupProbe:
   initialDelaySeconds: 60
   periodSeconds: 10
+  timeoutSeconds: 5
   failureThreshold: 60 # 10 minutes before liveness applies
+
+readinessProbe:
+  timeoutSeconds: 5
+  periodSeconds: 30
+  failureThreshold: 6
+
+livenessProbe:
+  # Also becomes curl's --max-time. Generous on purpose: killing the container is the
+  # most expensive possible response to a slow answer, and a wedged JVM stays wedged for
+  # far longer than ten seconds -- failureThreshold 6 x periodSeconds 30 still catches it
+  # within three minutes.
+  timeoutSeconds: 10
+  periodSeconds: 30
+  failureThreshold: 6
 
 # ── Scraping ───────────────────────────────────────────────────────────────────
 # The chart's own PodMonitor, which points at /api/monitoring/metrics and authenticates

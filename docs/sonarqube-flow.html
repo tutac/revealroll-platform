@@ -376,7 +376,11 @@ git push</pre>
       <div>
         <span class="who" style="--c:var(--sq)">browser</span>
         <h3>Generate the scanner token</h3>
-        <p>Administration → Security → Users → your account → Tokens → <b>Global Analysis Token</b>. Copy it once.</p>
+        <p>Go to <b>https://sonarqube.stg.revealroll.com/account/security</b> — or click your avatar in the
+          top-right corner → <b>My Account</b> → <b>Security</b>. Under <em>Generate Tokens</em>: name it
+          <code>github-actions</code>, set type to <b>Global Analysis Token</b>, Generate. It is shown once.</p>
+        <p class="note">Not under Administration → that path issues tokens to <em>other</em> users and has moved
+          between versions. Your own tokens have always lived on your account page.</p>
         <p class="note">This is a CI credential, so it goes to GitHub — not into a SealedSecret here. Cluster credentials
           are sealed into this repo; CI credentials live in CI. The directions are opposite on purpose.</p>
       </div>

@@ -39,8 +39,9 @@ password in the password manager**: nothing in this repository can recover it, d
 (the chart's password-setting Job re-runs on every sync and fails 401 forever once the
 password is no longer the default, which shows up as a permanently Degraded Application).
 
-Then, in the UI: **Administration → Security → Users → Tokens**, generate a *Global
-Analysis Token*. That token goes into the **application** repo, not this one.
+Then generate the scanner token at **`/account/security`** (avatar, top right → My Account
+→ Security) — *Generate Tokens*, type **Global Analysis Token**. It is shown once. That
+token goes into the **application** repo, not this one.
 
 ## The half that lives in `tutac/revealroll`
 
@@ -51,8 +52,12 @@ The scanner runs in the app repo's CI. Two files.
 ```properties
 sonar.projectKey=tutac_revealroll
 sonar.sources=.
+# master, not main — this repo's default branch
+#   (set the same value as the project's Main Branch in the SonarQube UI)
 sonar.exclusions=**/node_modules/**,**/.next/**,**/*.test.ts,**/*.test.tsx,**/e2e/**
-sonar.javascript.lcov.reportPaths=coverage/lcov.info
+# No unit-test coverage exists yet (the suites are Playwright). Add this line only once
+# something writes an LCOV file, or SonarQube reports 0% and the gate fails on coverage.
+# sonar.javascript.lcov.reportPaths=coverage/lcov.info
 ```
 
 And a job in `.github/workflows/ci.yml`, gated on the existing checks and gating the image
@@ -60,7 +65,7 @@ build in turn:
 
 ```yaml
   sonar:
-    needs: [static]
+    needs: [verify]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,11 +81,16 @@ build in turn:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 ```
 
-Then make the image build depend on it:
+Then make the image build depend on it — **both lines**, because `docker` guards itself with
+`always()` and explicit result checks, so adding to `needs` alone changes nothing:
 
 ```yaml
   docker:
-    needs: [static, ui, sonar]     # was [static, ui]
+    needs: [verify, integration, sonar]      # was [verify, integration]
+    if: >-
+      always() &&
+      … &&
+      needs.sonar.result == 'success'        # ← the line that actually blocks
 ```
 
 That last line is the whole point. Without it you have a report nobody is obliged to read;

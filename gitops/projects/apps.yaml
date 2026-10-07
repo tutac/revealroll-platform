@@ -14,6 +14,11 @@ spec:
   destinations:
     - server: https://kubernetes.default.svc
       namespace: revealroll
+    # social-media-host: isolated static file server for the social-poster script's
+    # Instagram/Facebook publishing — same project since it's an application workload
+    # like revealroll, just a separate namespace so it can't affect revealroll's deploys.
+    - server: https://kubernetes.default.svc
+      namespace: social-media-host
 
   # Empty on purpose. An application workload has no business creating ClusterRoles,
   # CRDs or namespaces. If a chart here ever needs one, that is a signal the thing

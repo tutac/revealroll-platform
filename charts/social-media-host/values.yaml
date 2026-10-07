@@ -23,11 +23,12 @@ ingress:
   host: media.stg.revealroll.com
   tlsSecretName: social-media-host-tls
   clusterIssuer: letsencrypt-prod
-  annotations:
-    # Listing is off by default in nginx:alpine — this turns it on so a wrong/old file
-    # being served shows up as a readable mistake instead of a silent 404.
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      autoindex on;
+  # Directory listing would've been a nice-to-have (via configuration-snippet: autoindex
+  # on) but this cluster's ingress-nginx has snippet directives disabled admission-side —
+  # a sensible default against injection, not something to fight. Files are only ever
+  # fetched by exact path anyway (Instagram/Facebook hit the URL we hand them), so this
+  # isn't missed.
+  annotations: {}
 
 resources:
   # Deliberately small — this box runs the real RevealRoll app too, and load was already

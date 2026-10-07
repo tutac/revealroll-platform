@@ -23,7 +23,9 @@ spec:
     automated:
       prune: true
       selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
+    # No CreateNamespace=true: the `apps` project's clusterResourceWhitelist is empty by
+    # design ("no business creating ... namespaces"), so a sync asking to manage Namespace
+    # fails with "resource :Namespace is not permitted in project apps". The namespace was
+    # created once by hand instead — same as `revealroll`'s own namespace.
 
   revisionHistoryLimit: 10

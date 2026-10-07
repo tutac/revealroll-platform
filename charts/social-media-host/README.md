@@ -16,7 +16,15 @@ single-node cluster. The directory has to exist before the pod can mount it:
 ssh deploy@<node> 'sudo mkdir -p /srv/social-media-host && sudo chown deploy:deploy /srv/social-media-host'
 ```
 
-(Already done on `staging-1` as of 2026-10-07.)
+The `social-media-host` namespace also has to exist before the first sync: the `apps`
+project's `clusterResourceWhitelist` is intentionally empty, so `CreateNamespace=true`
+isn't an option here (same reason `revealroll`'s namespace isn't ArgoCD-managed either):
+
+```
+ssh deploy@<node> 'sudo k3s kubectl create namespace social-media-host'
+```
+
+(Both already done on `staging-1` as of 2026-10-07.)
 
 ## Publishing a file
 

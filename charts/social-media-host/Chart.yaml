@@ -1,0 +1,10 @@
+apiVersion: v2
+name: social-media-host
+description: >
+  Tiny static file server for the RevealRoll social-poster script — gives it a public
+  https:// URL to hand Instagram and Facebook's publishing APIs, which only accept a link,
+  never a direct upload. Nothing here talks to the RevealRoll app or its data; it's just
+  nginx serving a directory.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

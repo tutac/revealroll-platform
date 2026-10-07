@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: social-media-host
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: apps
+
+  source:
+    repoURL: https://github.com/tutac/revealroll-platform.git
+    targetRevision: main
+    path: charts/social-media-host
+    helm:
+      valueFiles: [values-staging.yaml]
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: social-media-host
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+  revisionHistoryLimit: 10

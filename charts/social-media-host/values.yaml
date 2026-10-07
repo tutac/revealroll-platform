@@ -1,0 +1,40 @@
+replicaCount: 1
+
+# Single-node cluster — pinned explicitly so the hostPath volume below can never schedule
+# onto a different node later and silently serve an empty directory.
+nodeName: staging-1
+
+image:
+  repository: nginx
+  tag: "1.27-alpine"
+  pullPolicy: IfNotPresent
+
+# Single-node cluster (per infra handoff notes), so a hostPath volume is simpler and more
+# robust here than a PVC: the scheduler script running on the VPS writes video files
+# straight to this path on disk, no Kubernetes API call needed to publish one.
+hostPath: /srv/social-media-host
+
+service:
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  host: media.stg.revealroll.com
+  tlsSecretName: social-media-host-tls
+  clusterIssuer: letsencrypt-prod
+  annotations:
+    # Listing is off by default in nginx:alpine — this turns it on so a wrong/old file
+    # being served shows up as a readable mistake instead of a silent 404.
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      autoindex on;
+
+resources:
+  # Deliberately small — this box runs the real RevealRoll app too, and load was already
+  # elevated (3.44 on 4 vCPU) when this was set up. Static-file serving needs very little.
+  requests:
+    cpu: 10m
+    memory: 16Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi

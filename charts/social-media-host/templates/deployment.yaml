@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "social-media-host.fullname" . }}
+  labels:
+    {{- include "social-media-host.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "social-media-host.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "social-media-host.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: nginx
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: media
+              mountPath: /usr/share/nginx/html
+              readOnly: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: media
+          hostPath:
+            # Created once by hand on the node (mkdir -p + chmod) — see README in this
+            # chart's directory for the one-time setup command.
+            path: {{ .Values.hostPath }}
+            type: DirectoryOrCreate
+      # Single node anyway, but pin it explicitly so a hostPath volume can never schedule
+      # onto a different node and silently serve an empty directory.
+      nodeSelector:
+        kubernetes.io/hostname: {{ .Values.nodeName | default "" | quote }}

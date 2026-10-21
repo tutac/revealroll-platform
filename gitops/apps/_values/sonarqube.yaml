@@ -9,6 +9,22 @@
 # on a 100 GB disk, which makes the pod permanently unschedulable with a message that
 # does not mention storage. That is the first thing to look at if it will not schedule.
 
+# ── Scaled to zero when not scanning ───────────────────────────────────────────
+# SonarQube is the single largest consumer on this node: ~2.3 GB resident, roughly 30% of
+# an 8 GB box, held the whole time whether or not an analysis is running. With it up the
+# node sits at 80% memory and no swap, which leaves nothing for a spike -- and on a single
+# node an OOM kill surfaces as several unrelated-looking Kubernetes failures at once.
+#
+# Community Build analyses one branch on demand, so there is no reason to pay for it
+# while idle. Scale back up before a scan and down afterwards:
+#
+#   replicaCount: 1   -> commit -> Argo CD syncs -> wait for Ready -> run the scan
+#
+# The PVC and the PostgreSQL Application are deliberately left alone: analysis history
+# survives, and coming back up is a sync rather than a rebuild. Postgres idles at 60 MB,
+# which is not worth reclaiming.
+replicaCount: 0
+
 # ── Edition ────────────────────────────────────────────────────────────────────
 # Community Build. Worth knowing the boundary: branch and pull-request analysis are
 # Developer Edition features, so this instance analyses ONE branch. The CI job in the app
